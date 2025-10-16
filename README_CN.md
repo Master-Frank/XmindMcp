@@ -2,6 +2,8 @@
 
 一个功能强大的工具，支持将多种文件格式转换为XMind思维导图，集成AI驱动的分析和MCP服务器功能。
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 🚀 核心功能
 
 ### 1. 通用文件转换器

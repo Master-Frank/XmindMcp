@@ -2,6 +2,8 @@
 
 A powerful tool for converting multiple file formats to XMind mind maps with AI-powered analysis and MCP server integration.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 🚀 Core Features
 
 ### 1. Universal File Converter
