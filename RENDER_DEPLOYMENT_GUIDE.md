@@ -22,7 +22,7 @@
 - **Environment**: `Docker`
 - **Dockerfile Path**: `./Dockerfile`
 - **Build Command**: 留空（使用Dockerfile中的默认构建）
-- **Start Command**: `python xmind_mcp_server.py`
+- **Start Command**: 留空（Dockerfile中已定义启动命令）
 - **Instance Type**: 选择 "Free" 免费层
 
 #### 4. 环境变量配置

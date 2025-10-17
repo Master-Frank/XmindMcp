@@ -13,7 +13,5 @@ services:
       - key: RENDER
         value: "true"
     healthCheckPath: /health
-    buildCommand: ""
-    startCommand: "python xmind_mcp_server.py"
     plan: free # 使用免费层
     autoDeploy: true # 自动部署
