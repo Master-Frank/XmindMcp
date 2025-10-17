@@ -16,13 +16,14 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 
 # 导入核心引擎和AI扩展
 from xmind_core_engine import XMindCoreEngine, get_available_tools
 from xmind_ai_extensions import XMindAIExtensions
+from mcp_sse_handler import sse_handler, sse_endpoint, messages_endpoint
 
 
 class CreateMindMapRequest(BaseModel):
@@ -141,7 +142,10 @@ class XMindMCPServer:
                 "version": "1.0.0",
                 "docs_url": "/docs",
                 "tools_url": "/tools",
-                "keep_alive": self.keep_alive_enabled
+                "sse_url": "/sse",
+                "messages_url": "/messages/{session_id}",
+                "keep_alive": self.keep_alive_enabled,
+                "mcp_protocol": "2024-11-05"
             }
         
         @self.app.get("/health")
@@ -149,6 +153,16 @@ class XMindMCPServer:
             """健康检查"""
             from datetime import datetime
             return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+        
+        @self.app.get("/sse")
+        async def sse_connect():
+            """MCP SSE连接端点"""
+            return await sse_endpoint()
+        
+        @self.app.post("/messages/{session_id}")
+        async def handle_message(session_id: str, message: Dict[str, Any]):
+            """MCP消息处理端点"""
+            return await messages_endpoint(session_id, message)
         
         @self.app.get("/tools")
         async def get_tools():
