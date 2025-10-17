@@ -13,7 +13,6 @@ import requests
 import tempfile
 import subprocess
 import asyncio
-import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
