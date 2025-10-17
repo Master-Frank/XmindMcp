@@ -8,6 +8,9 @@ XMind MCP服务器
 import json
 import os
 import sys
+import asyncio
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -42,6 +45,8 @@ class XMindMCPServer:
         self.ai_extensions = XMindAIExtensions()
         self.app = None
         self.config = self._load_config()
+        self.keep_alive_enabled = os.environ.get("KEEP_ALIVE", "true").lower() == "true"
+        self.keep_alive_thread = None
     
     def _load_config(self) -> Dict[str, Any]:
         """加载配置"""
@@ -90,6 +95,41 @@ class XMindMCPServer:
         self._setup_routes()
         return app
     
+    def _start_keep_alive(self):
+        """启动内置保活机制"""
+        if not self.keep_alive_enabled:
+            return
+            
+        def keep_alive_loop():
+            """保活循环"""
+            import urllib.request
+            import urllib.error
+            
+            host = self.config.get("host", "0.0.0.0")
+            port = self.config.get("port", 8080)
+            health_url = f"http://{host}:{port}/health"
+            
+            print(f"🔧 启动内置保活机制 - 每5分钟检查一次")
+            print(f"📍 健康检查URL: {health_url}")
+            
+            while True:
+                try:
+                    # 访问健康检查端点
+                    with urllib.request.urlopen(health_url, timeout=10) as response:
+                        if response.status == 200:
+                            print(f"✅ 保活检查成功 - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        else:
+                            print(f"⚠️  保活检查异常 - 状态码: {response.status}")
+                except Exception as e:
+                    print(f"❌ 保活检查失败: {e}")
+                
+                # 5分钟后再次检查（避免15分钟休眠）
+                time.sleep(300)  # 300秒 = 5分钟
+        
+        # 启动保活线程
+        self.keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
+        self.keep_alive_thread.start()
+    
     def _setup_routes(self):
         """设置路由"""
         
@@ -100,7 +140,8 @@ class XMindMCPServer:
                 "message": "XMind MCP Server 正在运行",
                 "version": "1.0.0",
                 "docs_url": "/docs",
-                "tools_url": "/tools"
+                "tools_url": "/tools",
+                "keep_alive": self.keep_alive_enabled
             }
         
         @self.app.get("/health")
@@ -417,6 +458,9 @@ class XMindMCPServer:
         
         # 创建应用
         app = self.create_app()
+        
+        # 启动保活机制（在服务器启动前）
+        self._start_keep_alive()
         
         # 启动服务器
         uvicorn.run(

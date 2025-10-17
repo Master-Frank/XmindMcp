@@ -31,7 +31,10 @@
 PORT=8080
 PYTHONUNBUFFERED=1
 RENDER=true
+KEEP_ALIVE=true  # 启用内置保活机制，防止15分钟休眠
 ```
+
+💡 **保活机制说明**: 启用 `KEEP_ALIVE=true` 后，服务器会每5分钟自动访问自身的健康检查端点，防止Render免费层的15分钟自动休眠。这可以显著减少冷启动时间，提升用户体验。
 
 #### 5. 健康检查配置
 - **Health Check Path**: `/health`

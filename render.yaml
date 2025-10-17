@@ -12,6 +12,8 @@ services:
         value: "1"
       - key: RENDER
         value: "true"
+      - key: KEEP_ALIVE
+        value: "true"  # 启用内置保活机制
     healthCheckPath: /health
     plan: free # 使用免费层
     autoDeploy: true # 自动部署
