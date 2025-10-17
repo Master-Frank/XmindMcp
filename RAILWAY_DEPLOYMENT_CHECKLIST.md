@@ -33,7 +33,7 @@
 
 ### 一键部署
 ```markdown
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2FMaster-Frank%2FXmindMcp&envs=PORT%2CENVIRONMENT&PORT=8080&ENVIRONMENT=production)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/72f585a6-7feb-40e0-b09e-565cf6b80ccd)
 ```
 
 ### 手动部署流程
