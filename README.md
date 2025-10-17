@@ -203,6 +203,25 @@ python xmind_mcp_server.py --debug
 
 📖 **[Full Railway Deployment Guide](RAILWAY_DEPLOYMENT_GUIDE.md)**
 
+#### 🎨 Render Cloud Deployment
+**One-click deploy to Render:**
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Master-Frank/XmindMcp)
+
+**Manual Deployment:**
+1. Visit [Render](https://render.com)
+2. Connect your GitHub repository
+3. Configure Docker deployment settings
+4. Deploy and access your MCP server
+
+**Features:**
+- ✅ Professional web hosting platform
+- ✅ Automatic HTTPS and SSL certificates
+- ✅ GitHub integration with auto-deployment
+- ✅ 750 hours/month free tier (24/7 capable)
+- ✅ Professional monitoring and logs
+
+📖 **[Full Render Deployment Guide](RENDER_DEPLOYMENT_GUIDE.md)**
+
 #### API Endpoints
 Once server is running, available endpoints:
 - `POST /tools/convert_to_xmind` - Convert files to XMind
