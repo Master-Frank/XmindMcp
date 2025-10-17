@@ -154,7 +154,7 @@ class XMindCoreEngine:
         
         return result
     
-    def create_mind_map(self, title: str, topics_json: str) -> Dict[str, Any]:
+    def create_mind_map(self, title: str, topics_json: str, output_path: Optional[str] = None) -> Dict[str, Any]:
         """创建新的思维导图"""
         try:
             # 解析JSON格式的主题
@@ -172,11 +172,21 @@ class XMindCoreEngine:
             with open(temp_file, 'w', encoding='utf-8') as f:
                 f.write(outline_content)
             
+            # 确定输出文件路径
+            if output_path:
+                # 如果指定了输出路径，使用指定的路径
+                output_file = output_path
+                output_dir = os.path.dirname(output_file)
+                if output_dir and not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+            else:
+                # 默认保存到output目录
+                output_dir = "output"
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                output_file = os.path.join(output_dir, f"{safe_title}.xmind")
+            
             # 转换为XMind
-            output_dir = "output"
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            output_file = os.path.join(output_dir, f"{safe_title}.xmind")
             parser = ParserFactory.get_parser(temp_file)
             json_structure = parser.parse()
             create_xmind_file(json_structure, output_file)

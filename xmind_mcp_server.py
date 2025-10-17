@@ -30,6 +30,7 @@ class CreateMindMapRequest(BaseModel):
     """创建思维导图请求"""
     title: str
     topics_json: str
+    output_path: Optional[str] = None
 
 
 class ConvertFileRequest(BaseModel):
@@ -218,7 +219,7 @@ class XMindMCPServer:
         async def create_mind_map(request: CreateMindMapRequest):
             """创建思维导图"""
             try:
-                result = self.engine.create_mind_map(request.title, request.topics_json)
+                result = self.engine.create_mind_map(request.title, request.topics_json, request.output_path)
                 return result
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
