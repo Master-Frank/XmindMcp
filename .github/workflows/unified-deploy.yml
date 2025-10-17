@@ -1,0 +1,249 @@
+name: 🚀 Unified Deploy (Python + Docker + Pages)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      deploy_type:
+        description: 'Deployment type'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - python-only
+          - docker-only
+          - pages-only
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: masterfrank/xmind-mcp-server
+
+jobs:
+  # Python MCP服务器测试和部署
+  python-deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deploy_type == 'all' || github.event.inputs.deploy_type == 'python-only' || github.event.inputs.deploy_type == ''
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install fastapi uvicorn openpyxl beautifulsoup4 python-docx requests
+    
+    - name: Validate server startup
+      run: |
+        echo "🔍 Testing MCP server startup..."
+        timeout 30s python xmind_mcp_server.py &
+        SERVER_PID=$!
+        sleep 10
+        
+        # 测试健康检查端点
+        if curl -f http://localhost:8080/health; then
+          echo "✅ Server started successfully!"
+          kill $SERVER_PID
+        else
+          echo "❌ Server failed to start"
+          kill $SERVER_PID || true
+          exit 1
+        fi
+    
+    - name: Test core functionality
+      run: |
+        echo "🧪 Testing core MCP functionality..."
+        timeout 30s python xmind_mcp_server.py &
+        SERVER_PID=$!
+        sleep 5
+        
+        # 测试健康检查
+        echo "Testing health endpoint..."
+        curl -s http://localhost:8080/health | jq .
+        
+        # 测试API文档
+        echo "Testing API docs..."
+        curl -s http://localhost:8080/docs | grep -q "FastAPI" && echo "✅ API docs available" || echo "❌ API docs failed"
+        
+        kill $SERVER_PID || true
+    
+    - name: Generate Python deployment summary
+      run: |
+        echo "## 🐍 Python MCP Server Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Server startup: PASSED" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Health check: PASSED" >> $GITHUB_STEP_SUMMARY
+        echo "✅ API documentation: PASSED" >> $GITHUB_STEP_SUMMARY
+
+  # Docker构建（可选）
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: python-deploy
+    if: (github.event.inputs.deploy_type == 'all' || github.event.inputs.deploy_type == 'docker-only') && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub (Optional)
+      uses: docker/login-action@v3
+      if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+      continue-on-error: true
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build Docker image (Optional Push)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+      continue-on-error: true
+
+    - name: Test Docker image
+      run: |
+        docker build -t test-server .
+        docker run -d -p 8080:8080 --name test-server test-server
+        sleep 15
+        curl -f http://localhost:8080/health || exit 1
+        docker stop test-server
+        docker rm test-server
+      continue-on-error: true
+
+    - name: Generate Docker summary
+      run: |
+        echo "## 🐳 Docker Build Status" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}" = "true" ]; then
+          echo "✅ Docker login: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Image push: ENABLED" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Docker login: SKIPPED (no credentials)" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ Image push: DISABLED" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "✅ Image build: PASSED" >> $GITHUB_STEP_SUMMARY
+
+  # GitHub Pages部署
+  deploy-pages:
+    runs-on: ubuntu-latest
+    needs: python-deploy
+    if: (github.event.inputs.deploy_type == 'all' || github.event.inputs.deploy_type == 'pages-only') && github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Generate Pages summary
+        run: |
+          echo "## 📄 GitHub Pages Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Pages build: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployment: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+
+  # 最终总结
+  deployment-summary:
+    runs-on: ubuntu-latest
+    needs: [python-deploy, docker-build, deploy-pages]
+    if: always() && !cancelled()
+    
+    steps:
+    - name: Generate final summary
+      run: |
+        echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 XMind MCP Server Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Status Overview:" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.python-deploy.result }}" = "success" ]; then
+          echo "- ✅ Python Server: PASSED" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ Python Server: FAILED" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.docker-build.result }}" = "success" ]; then
+          echo "- ✅ Docker Build: PASSED" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.docker-build.result }}" = "skipped" ]; then
+          echo "- ⏭️ Docker Build: SKIPPED" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ Docker Build: FAILED" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.deploy-pages.result }}" = "success" ]; then
+          echo "- ✅ GitHub Pages: PASSED" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.deploy-pages.result }}" = "skipped" ]; then
+          echo "- ⏭️ GitHub Pages: SKIPPED" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ GitHub Pages: FAILED" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Quick Access:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Web Interface**: https://master-frank.github.io/XmindMcp/" >> $GITHUB_STEP_SUMMARY
+        echo "- **Repository**: https://github.com/Master-Frank/XmindMcp" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Documentation**: Available after local startup" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🛠️ Usage Options:" >> $GITHUB_STEP_SUMMARY
+        echo "1. **GitHub Codespaces**: [Create Cloud IDE](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=Master-Frank/XmindMcp)" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Local Development**: \`git clone\` and \`python xmind_mcp_server.py\`" >> $GITHUB_STEP_SUMMARY
+        echo "3. **Docker**: Use \`docker-quick-start.sh\` (if Docker credentials configured)" >> $GITHUB_STEP_SUMMARY

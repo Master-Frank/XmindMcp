@@ -20,7 +20,7 @@ jobs:
         python-version: '3.9'
     
     - name: Cache pip dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -59,7 +59,7 @@ jobs:
         echo "🎯 Repository: https://github.com/Master-Frank/XmindMcp" >> service-info.txt
     
     - name: Upload service artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: mcp-server-info
         path: service-info.txt
