@@ -1,0 +1,288 @@
+{
+  "summary": {
+    "total_tests": 33,
+    "passed_tests": 29,
+    "failed_tests": 4,
+    "success_rate": 87.87878787878788,
+    "timestamp": "2025-10-17T19:40:12.984989"
+  },
+  "categories": {
+    "环境": {
+      "passed": 3,
+      "failed": 1,
+      "total": 4
+    },
+    "核心": {
+      "passed": 1,
+      "failed": 1,
+      "total": 2
+    },
+    "服务器": {
+      "passed": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "协议": {
+      "passed": 2,
+      "failed": 0,
+      "total": 2
+    },
+    "工具": {
+      "passed": 9,
+      "failed": 0,
+      "total": 9
+    },
+    "错误处理": {
+      "passed": 3,
+      "failed": 2,
+      "total": 5
+    },
+    "Trae集成": {
+      "passed": 5,
+      "failed": 0,
+      "total": 5
+    },
+    "本地服务器": {
+      "passed": 4,
+      "failed": 0,
+      "total": 4
+    }
+  },
+  "detailed_results": [
+    {
+      "test_name": "Python版本检查",
+      "success": true,
+      "details": "Python 3.12.10",
+      "category": "环境",
+      "timestamp": "2025-10-17T19:39:43.027378"
+    },
+    {
+      "test_name": "依赖包检查",
+      "success": false,
+      "details": "3/4 个包已安装",
+      "category": "环境",
+      "timestamp": "2025-10-17T19:39:43.028375"
+    },
+    {
+      "test_name": "目录结构检查",
+      "success": true,
+      "details": "4/4 个目录存在",
+      "category": "环境",
+      "timestamp": "2025-10-17T19:39:43.030367"
+    },
+    {
+      "test_name": "核心文件检查",
+      "success": true,
+      "details": "4/4 个文件存在",
+      "category": "环境",
+      "timestamp": "2025-10-17T19:39:43.031364"
+    },
+    {
+      "test_name": "引擎初始化",
+      "success": true,
+      "details": "发现 4 个工具",
+      "category": "核心",
+      "timestamp": "2025-10-17T19:39:43.032361"
+    },
+    {
+      "test_name": "创建思维导图",
+      "success": false,
+      "details": "文件: N/A",
+      "category": "核心",
+      "timestamp": "2025-10-17T19:39:43.032361"
+    },
+    {
+      "test_name": "服务器健康检查",
+      "success": true,
+      "details": "状态码: 200",
+      "category": "服务器",
+      "timestamp": "2025-10-17T19:39:43.731318"
+    },
+    {
+      "test_name": "SSE连接",
+      "success": true,
+      "details": "会话ID: fe86dfac...",
+      "category": "服务器",
+      "timestamp": "2025-10-17T19:39:44.346671"
+    },
+    {
+      "test_name": "JSON-RPC初始化",
+      "success": true,
+      "details": "协议格式正确",
+      "category": "协议",
+      "timestamp": "2025-10-17T19:39:44.979983"
+    },
+    {
+      "test_name": "工具列表获取",
+      "success": true,
+      "details": "发现 3 个工具: read_xmind_file, create_mind_map, analyze_mind_map",
+      "category": "协议",
+      "timestamp": "2025-10-17T19:39:45.619278"
+    },
+    {
+      "test_name": "创建基本思维导图",
+      "success": true,
+      "details": "成功创建思维导图: 统一测试思维导图",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:46.278089"
+    },
+    {
+      "test_name": "读取基本思维导图",
+      "success": true,
+      "details": "读取成功",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:46.888468"
+    },
+    {
+      "test_name": "分析基本思维导图",
+      "success": true,
+      "details": "分析完成",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:47.578084"
+    },
+    {
+      "test_name": "创建项目规划图",
+      "success": true,
+      "details": "成功创建思维导图: 项目规划",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:48.130607"
+    },
+    {
+      "test_name": "读取项目规划图",
+      "success": true,
+      "details": "读取成功",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:48.760921"
+    },
+    {
+      "test_name": "分析项目规划图",
+      "success": true,
+      "details": "分析完成",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:49.407190"
+    },
+    {
+      "test_name": "创建学习路线图",
+      "success": true,
+      "details": "成功创建思维导图: 学习路线",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:49.995059"
+    },
+    {
+      "test_name": "读取学习路线图",
+      "success": true,
+      "details": "读取成功",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:50.662145"
+    },
+    {
+      "test_name": "分析学习路线图",
+      "success": true,
+      "details": "分析完成",
+      "category": "工具",
+      "timestamp": "2025-10-17T19:39:51.592625"
+    },
+    {
+      "test_name": "错误处理 - 不存在的工具",
+      "success": true,
+      "details": "期望错误，实际: 有错误 (错误码: -32602, 信息: Invalid params)",
+      "category": "错误处理",
+      "timestamp": "2025-10-17T19:39:52.210342"
+    },
+    {
+      "test_name": "错误处理 - 无效的文件路径",
+      "success": false,
+      "details": "期望错误，实际: 无错误 (结果: {'content': [{'type': 'text', 'text': '成功读取XMind文件: /invalid/path/file.xmind'}]})",
+      "category": "错误处理",
+      "timestamp": "2025-10-17T19:39:52.752888"
+    },
+    {
+      "test_name": "错误处理 - 缺少必需参数",
+      "success": false,
+      "details": "期望错误，实际: 无错误 (结果: {'content': [{'type': 'text', 'text': '成功创建思维导图: untitled'}]})",
+      "category": "错误处理",
+      "timestamp": "2025-10-17T19:39:53.385060"
+    },
+    {
+      "test_name": "错误处理 - 空参数",
+      "success": true,
+      "details": "期望成功，实际: 成功 (结果: {'content': [{'type': 'text', 'text': '成功创建思维导图: '}]})",
+      "category": "错误处理",
+      "timestamp": "2025-10-17T19:39:54.004309"
+    },
+    {
+      "test_name": "错误处理 - 格式错误的JSON-RPC",
+      "success": true,
+      "details": "期望错误，实际: 有错误 (错误码: -32602, 信息: Invalid params)",
+      "category": "错误处理",
+      "timestamp": "2025-10-17T19:39:54.627145"
+    },
+    {
+      "test_name": "Trae集成 - 基础连接测试",
+      "success": true,
+      "details": "状态码: 200",
+      "category": "Trae集成",
+      "timestamp": "2025-10-17T19:39:55.372205"
+    },
+    {
+      "test_name": "Trae集成 - Trae风格初始化",
+      "success": true,
+      "details": "Trae初始化成功",
+      "category": "Trae集成",
+      "timestamp": "2025-10-17T19:39:56.749519"
+    },
+    {
+      "test_name": "Trae集成 - 工具列表获取",
+      "success": true,
+      "details": "发现 3 个工具: read_xmind_file, create_mind_map, analyze_mind_map",
+      "category": "Trae集成",
+      "timestamp": "2025-10-17T19:39:57.365870"
+    },
+    {
+      "test_name": "Trae集成 - 核心功能验证",
+      "success": true,
+      "details": "创建: ✓, 读取: ✓, 分析: ✓",
+      "category": "Trae集成",
+      "timestamp": "2025-10-17T19:39:59.244908"
+    },
+    {
+      "test_name": "Trae集成 - 性能压力测试",
+      "success": true,
+      "details": "成功率: 100.0%, 平均时间: 0.71s",
+      "category": "Trae集成",
+      "timestamp": "2025-10-17T19:40:06.299083"
+    },
+    {
+      "test_name": "本地服务器 - 基础端点测试",
+      "success": true,
+      "details": "根路径: ✓, 健康检查: ✓, 工具列表: ✓",
+      "category": "本地服务器",
+      "timestamp": "2025-10-17T19:40:07.986732"
+    },
+    {
+      "test_name": "本地服务器 - SSE端点测试",
+      "success": true,
+      "details": "会话ID: d94070aa..., 事件数: 3",
+      "category": "本地服务器",
+      "timestamp": "2025-10-17T19:40:08.634934"
+    },
+    {
+      "test_name": "本地服务器 - 消息端点测试",
+      "success": true,
+      "details": "消息发送成功",
+      "category": "本地服务器",
+      "timestamp": "2025-10-17T19:40:09.883792"
+    },
+    {
+      "test_name": "本地服务器 - 服务器管理测试",
+      "success": true,
+      "details": "成功创建 3 个会话",
+      "category": "本地服务器",
+      "timestamp": "2025-10-17T19:40:12.983991"
+    }
+  ],
+  "recommendations": [
+    "📦 建议安装缺失的依赖包或修复环境配置",
+    "✅ 基本功能正常，可以开始使用主要功能"
+  ]
+}

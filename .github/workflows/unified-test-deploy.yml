@@ -86,7 +86,7 @@ jobs:
         python tests/run_all_tests.py --english --save-report
         
         # 检查测试结果并要求100%通过
-        if [ -f "tests/test_reports/test_report_*.json" ]; then
+        if ls tests/test_reports/test_report_*.json 1> /dev/null 2>&1; then
           echo "✅ Core tests completed"
           # 显示测试摘要
           latest_report=$(ls -t tests/test_reports/test_report_*.json | head -1)
@@ -107,7 +107,9 @@ jobs:
           
           echo "🎉 Core functionality tests passed with ${pass_rate}% rate! 可以继续部署"
         else
-          echo "❌ Core tests failed to run"
+          echo "❌ Core tests failed to run - no test report found"
+          echo "Available files in tests/test_reports/:"
+          ls -la tests/test_reports/ || echo "Directory does not exist"
           exit 1
         fi
     
