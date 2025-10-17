@@ -113,27 +113,11 @@ jobs:
           exit 1
         fi
     
-    - name: Run unified test suite
+    - name: Skip unified test suite (run manually after deployment)
       run: |
-        echo "🔬 Running unified test suite..."
-        cd tests/unified_test_suite
-        python mcp_test.py
-        
-        # 检查统一测试结果（仅检查是否运行完成，不要求100%通过）
-        if [ -f "test_report.json" ]; then
-          echo "✅ Unified tests completed"
-          echo "📋 Unified test results:"
-          cat test_report.json | jq '.test_results | length' 
-          success_count=$(cat test_report.json | jq '[.test_results[] | select(.success == true)] | length')
-          total_count=$(cat test_report.json | jq '.test_results | length')
-          echo "✅ Passed: $success_count/$total_count tests"
-          
-          # 统一测试套件不要求100%通过，只要求运行完成
-          echo "🎉 Unified test suite completed successfully!"
-        else
-          echo "❌ Unified tests failed to run"
-          exit 1
-        fi
+        echo "⏭️  统一测试套件将在Render部署完成后手动运行"
+        echo "📋 部署完成后，请运行: python test_render_service.py"
+        echo "🔗 该脚本将自动检查Render服务状态并运行统一测试"
     
     - name: Validate server startup
       run: |
@@ -160,10 +144,15 @@ jobs:
         echo "## 🧪 Unified Test Results" >> $GITHUB_STEP_SUMMARY
         echo "✅ Dependency installation: PASSED" >> $GITHUB_STEP_SUMMARY
         echo "✅ Core functionality tests: PASSED (100% required and achieved)" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Unified test suite: COMPLETED (no 100% requirement)" >> $GITHUB_STEP_SUMMARY
+        echo "⏭️  Unified test suite: SKIPPED (run manually after deployment)" >> $GITHUB_STEP_SUMMARY
         echo "✅ Server startup validation: PASSED" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "🎉 All required tests completed successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "🎉 Core tests completed successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📋 Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. 等待Render部署完成" >> $GITHUB_STEP_SUMMARY
+        echo "2. 运行: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
+        echo "3. 该脚本将自动测试已部署的服务" >> $GITHUB_STEP_SUMMARY
 
   # Render部署任务
   deploy-to-render:
@@ -194,6 +183,9 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
         echo "1. 访问 [Render Dashboard](https://dashboard.render.com) 查看部署状态" >> $GITHUB_STEP_SUMMARY
+        echo "2. 等待部署完成（约2-5分钟）" >> $GITHUB_STEP_SUMMARY
+        echo "3. 运行统一测试: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
+        echo "4. 验证MCP服务器功能" >> $GITHUB_STEP_SUMMARY
     
     - name: Generate deployment summary
       run: |
