@@ -47,7 +47,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install fastapi uvicorn openpyxl beautifulsoup4 python-docx requests
+        pip install fastapi uvicorn python-multipart pydantic jinja2 openpyxl beautifulsoup4 python-docx requests
     
     - name: Validate server startup
       run: |
@@ -142,6 +142,7 @@ jobs:
       continue-on-error: true
 
     - name: Test Docker image
+      if: steps.check-docker.outputs.has_credentials == 'true'
       run: |
         docker build -t test-server .
         docker run -d -p 8080:8080 --name test-server test-server
