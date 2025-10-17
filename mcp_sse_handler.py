@@ -77,6 +77,10 @@ class MCPSSEHandler:
             yield f"data: {json.dumps(error_msg)}\n\n"
             return
         
+        # 发送endpoint事件（MCP规范要求）
+        endpoint_msg = f"event: endpoint\ndata: /messages/{session_id}\n\n"
+        yield endpoint_msg
+        
         # 发送初始连接确认
         init_msg = {
             "jsonrpc": "2.0",
@@ -337,6 +341,15 @@ async def messages_endpoint(session_id: str, message: Dict[str, Any]):
     try:
         response = await sse_handler.process_mcp_message(session_id, message)
         await sse_handler.send_message(session_id, response)
-        return {"status": "message_processed"}
+        # 返回完整的JSON-RPC响应，而不是简单的状态
+        return response
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "error": {
+                "code": -32603,
+                "message": "Internal error",
+                "data": str(e)
+            }
+        }
