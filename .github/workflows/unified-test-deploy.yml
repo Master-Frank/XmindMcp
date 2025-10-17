@@ -380,7 +380,7 @@ To enable real deployment, configure these GitHub Secrets:
           echo "⚠️ Deployment: SIMULATED (manual mode)" >> $GITHUB_STEP_SUMMARY
           echo "✅ Service validation: PASSED" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. 🔧 Configure GitHub Secrets for real deployment" >> $GITHUB_STEP_SUMMARY
           echo "2. 🚀 Re-run this workflow to trigger actual deployment" >> $GITHUB_STEP_SUMMARY
           echo "3. 🧪 Run manual tests: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
