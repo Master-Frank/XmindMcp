@@ -96,17 +96,18 @@ jobs:
     needs: python-deploy
     if: |
       (github.event.inputs.deploy_type == 'all' || github.event.inputs.deploy_type == 'docker-only') && 
-      github.ref == 'refs/heads/main' && 
-      (vars.ENABLE_DOCKER == 'true' || (secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != ''))
+      github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
+      if: steps.check-docker.outputs.has_credentials == 'true'
       uses: docker/setup-buildx-action@v3
 
     - name: Log in to Docker Hub (Optional)
+      if: steps.check-docker.outputs.has_credentials == 'true'
       uses: docker/login-action@v3
       continue-on-error: true
       with:
@@ -115,6 +116,7 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Extract metadata
+      if: steps.check-docker.outputs.has_credentials == 'true'
       id: meta
       uses: docker/metadata-action@v5
       with:
@@ -127,11 +129,12 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build Docker image (Optional Push)
+      if: steps.check-docker.outputs.has_credentials == 'true'
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64,linux/arm64
-        push: ${{ (vars.ENABLE_DOCKER == 'true' || (secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '')) }}
+        push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
@@ -149,16 +152,17 @@ jobs:
       continue-on-error: true
 
     - name: Generate Docker summary
+      if: always()
       run: |
         echo "## 🐳 Docker Build Status" >> $GITHUB_STEP_SUMMARY
-        if [ "${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}" = "true" ]; then
+        if [ "${{ steps.check-docker.outputs.has_credentials }}" = "true" ]; then
           echo "✅ Docker login: SUCCESS" >> $GITHUB_STEP_SUMMARY
           echo "✅ Image push: ENABLED" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Image build: PASSED" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⚠️ Docker login: SKIPPED (no credentials)" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Docker build: SKIPPED (no credentials)" >> $GITHUB_STEP_SUMMARY
           echo "ℹ️ Image push: DISABLED" >> $GITHUB_STEP_SUMMARY
         fi
-        echo "✅ Image build: PASSED" >> $GITHUB_STEP_SUMMARY
 
   # GitHub Pages部署
   deploy-pages:
@@ -180,7 +184,18 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - name: Checkout
+      - name: Check Docker credentials
+        id: check-docker
+        run: |
+          if [ -n "${{ secrets.DOCKER_USERNAME }}" ] && [ -n "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+      
+      - name: Checkout code
+        if: steps.check-docker.outputs.has_credentials == 'true'
         uses: actions/checkout@v4
       
       - name: Setup Pages
