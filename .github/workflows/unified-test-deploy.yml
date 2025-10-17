@@ -316,7 +316,7 @@ To enable real deployment, configure these GitHub Secrets:
             conclusion = 'success';
             summary = '✅ Deployment completed successfully!';
             details = `Render deployment completed successfully.
-            
+
 ✅ Service is live and responding
 ✅ Post-deployment tests completed
 ✅ All validations passed`;
