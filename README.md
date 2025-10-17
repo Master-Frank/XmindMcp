@@ -184,6 +184,25 @@ python xmind_mcp_server.py --port 9000
 python xmind_mcp_server.py --debug
 ```
 
+#### 🚄 Railway Cloud Deployment (Recommended)
+**One-click deploy to Railway:**
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2FMaster-Frank%2FXmindMcp)
+
+**Manual Deployment:**
+1. Visit [Railway](https://railway.app)
+2. Connect your GitHub repository
+3. Railway auto-detects and deploys your project
+4. Access your MCP server via the provided URL
+
+**Features:**
+- ✅ Native WebSocket support for MCP protocol
+- ✅ Continuous 24/7 operation (no sleep mode)
+- ✅ Automatic HTTPS and SSL certificates
+- ✅ GitHub integration with auto-deployment
+- ✅ $5/month free tier
+
+📖 **[Full Railway Deployment Guide](RAILWAY_DEPLOYMENT_GUIDE.md)**
+
 #### API Endpoints
 Once server is running, available endpoints:
 - `POST /tools/convert_to_xmind` - Convert files to XMind
