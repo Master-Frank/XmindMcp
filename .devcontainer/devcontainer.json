@@ -1,0 +1,53 @@
+{
+    "name": "XMind MCP Server - Cloud IDE",
+    "image": "mcr.microsoft.com/devcontainers/python:3.9",
+    
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "18"
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "ms-python.flake8",
+                "ms-vscode.vscode-json"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "python.linting.enabled": true,
+                "python.linting.flake8Enabled": true,
+                "python.formatting.provider": "black",
+                "python.formatting.blackPath": "/usr/local/bin/black"
+            }
+        }
+    },
+    
+    "forwardPorts": [8080, 3000],
+    "portsAttributes": {
+        "8080": {
+            "label": "XMind MCP Server",
+            "onAutoForward": "openBrowser",
+            "protocol": "http"
+        }
+    },
+    
+    "postCreateCommand": "pip install -r requirements.txt || pip install fastapi uvicorn openpyxl beautifulsoup4 python-docx",
+    
+    "postStartCommand": "python quick_start.py",
+    
+    "remoteUser": "vscode",
+    
+    "hostRequirements": {
+        "cpus": 2,
+        "memory": "4gb",
+        "storage": "32gb"
+    },
+    
+    "workspaceFolder": "/workspaces/XmindMcp"
+}
