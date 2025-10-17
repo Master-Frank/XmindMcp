@@ -58,6 +58,28 @@ jobs:
         python -c "import fastapi; print('✅ fastapi installed')"
         python -c "import uvicorn; print('✅ uvicorn installed')"
     
+    - name: Start MCP server for testing
+      run: |
+        echo "🚀 Starting MCP server for testing..."
+        # 启动服务器后台运行
+        python xmind_mcp_server.py &
+        SERVER_PID=$!
+        echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+        
+        # 等待服务器启动
+        echo "⏳ Waiting for server to start..."
+        for i in {1..30}; do
+          if curl -f http://localhost:8080/health; then
+            echo "✅ Server started successfully!"
+            break
+          fi
+          if [ $i -eq 30 ]; then
+            echo "❌ Server failed to start within 30 seconds"
+            exit 1
+          fi
+          sleep 1
+        done
+    
     - name: Run core functionality tests
       run: |
         echo "🧪 Running core functionality tests..."
@@ -77,13 +99,13 @@ jobs:
           
           echo "📈 Test summary: $passed_scripts/$total_scripts scripts passed ($pass_rate%)"
           
-          # 必须100%通过才允许后续部署
-          if [ "$passed_scripts" -ne "$total_scripts" ]; then
-            echo "❌ Core tests not 100% passed, deployment blocked"
+          # 要求100%通过率
+          if [ "$(echo "$pass_rate < 100" | bc -l)" = "1" ]; then
+            echo "❌ Core tests pass rate below 100%, deployment blocked"
             exit 1
           fi
           
-          echo "🎉 Core functionality tests 100% passed! 可以继续部署"
+          echo "🎉 Core functionality tests passed with ${pass_rate}% rate! 可以继续部署"
         else
           echo "❌ Core tests failed to run"
           exit 1
@@ -114,18 +136,21 @@ jobs:
     - name: Validate server startup
       run: |
         echo "🔍 Validating MCP server startup..."
-        timeout 30s python xmind_mcp_server.py &
-        SERVER_PID=$!
-        sleep 10
-        
-        # 测试健康检查端点
+        # 服务器已在前面启动，只需验证健康检查
         if curl -f http://localhost:8080/health; then
-          echo "✅ Server started successfully!"
-          kill $SERVER_PID
+          echo "✅ Server is running successfully!"
         else
-          echo "❌ Server failed to start"
-          kill $SERVER_PID || true
+          echo "❌ Server health check failed"
           exit 1
+        fi
+    
+    - name: Stop MCP server
+      if: always()
+      run: |
+        echo "🛑 Stopping MCP server..."
+        if [ -n "$SERVER_PID" ]; then
+          kill $SERVER_PID || true
+          echo "✅ Server stopped"
         fi
     
     - name: Generate test summary
