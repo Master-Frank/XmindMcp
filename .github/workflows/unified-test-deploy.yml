@@ -177,19 +177,6 @@ jobs:
     - name: Generate deployment summary
       run: |
         echo "## 🎨 Render Deployment Summary" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Deployment: Triggered (manual mode)" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Service validation: PASSED" >> $GITHUB_STEP_SUMMARY
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
-        echo "1. 访问 [Render Dashboard](https://dashboard.render.com) 查看部署状态" >> $GITHUB_STEP_SUMMARY
-        echo "2. 等待部署完成（约2-5分钟）" >> $GITHUB_STEP_SUMMARY
-        echo "3. 运行统一测试: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
-        echo "4. 验证MCP服务器功能" >> $GITHUB_STEP_SUMMARY
-    
-    - name: Generate deployment summary
-      run: |
-        echo "## 🎨 Render Deployment Summary" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ steps.check-credentials.outputs.has_credentials }}" = "true" ]; then
           echo "✅ Credentials: Configured" >> $GITHUB_STEP_SUMMARY
@@ -201,13 +188,20 @@ jobs:
           echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. 访问 [Render Dashboard](https://dashboard.render.com) 查看部署状态" >> $GITHUB_STEP_SUMMARY
           echo "2. 等待部署完成（约2-5分钟）" >> $GITHUB_STEP_SUMMARY
-          echo "3. 测试MCP服务器功能" >> $GITHUB_STEP_SUMMARY
-          echo "4. 配置MCP客户端连接" >> $GITHUB_STEP_SUMMARY
+          echo "3. 运行统一测试: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
+          echo "4. 验证MCP服务器功能" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⚠️ Deployment: Skipped (no credentials)" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Deployment: Triggered (manual mode)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Service validation: PASSED" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Setup Required" >> $GITHUB_STEP_SUMMARY
-          echo "请配置以下GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. 访问 [Render Dashboard](https://dashboard.render.com) 查看部署状态" >> $GITHUB_STEP_SUMMARY
+          echo "2. 等待部署完成（约2-5分钟）" >> $GITHUB_STEP_SUMMARY
+          echo "3. 运行统一测试: python test_render_service.py" >> $GITHUB_STEP_SUMMARY
+          echo "4. 验证MCP服务器功能" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Optional Setup" >> $GITHUB_STEP_SUMMARY
+          echo "如需自动部署，请配置以下GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
           echo "- \`RENDER_API_KEY\`: 你的Render API密钥" >> $GITHUB_STEP_SUMMARY
           echo "- \`RENDER_SERVICE_ID\`: Render服务ID" >> $GITHUB_STEP_SUMMARY
           echo "- \`RENDER_SERVICE_URL\`: (可选) 服务URL用于测试" >> $GITHUB_STEP_SUMMARY
