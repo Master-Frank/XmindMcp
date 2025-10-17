@@ -305,32 +305,23 @@ jobs:
           
           if (!hasCredentials) {
             conclusion = 'neutral';
-            summary = '⚠️ Deployment simulated (credentials not configured)';
-            details = `Deployment was simulated because Render credentials are not configured.
-            
-To enable real deployment, configure these GitHub Secrets:
-- RENDER_API_KEY: Your Render API key
-- RENDER_SERVICE_ID: Your Render service ID
-- RENDER_SERVICE_URL: (optional) Service URL for testing`;
+            summary = 'Deployment simulated (credentials not configured)';
+            details = 'Deployment was simulated because Render credentials are not configured.\n\nTo enable real deployment, configure these GitHub Secrets:\n- RENDER_API_KEY: Your Render API key\n- RENDER_SERVICE_ID: Your Render service ID\n- RENDER_SERVICE_URL: (optional) Service URL for testing';
           } else if (deployStatus === 'live') {
             conclusion = 'success';
-            summary = '✅ Deployment completed successfully!';
-            details = `Render deployment completed successfully.
-
-            ✅ Service is live and responding
-            ✅ Post-deployment tests completed
-            ✅ All validations passed`;
+            summary = 'Deployment completed successfully!';
+            details = 'Render deployment completed successfully.\n\n- Service is live and responding\n- Post-deployment tests completed\n- All validations passed';
           } else if (deployStatus === 'failed') {
             conclusion = 'failure';
-            summary = '❌ Deployment failed';
-            details = `Render deployment failed. Check the workflow logs for details.`;
+            summary = 'Deployment failed';
+            details = 'Render deployment failed. Check the workflow logs for details.';
           } else if (deployStatus === 'timeout') {
             conclusion = 'failure';
-            summary = '⏰ Deployment timeout';
-            details = `Render deployment timed out. The deployment may still be in progress.`;
+            summary = 'Deployment timeout';
+            details = 'Render deployment timed out. The deployment may still be in progress.';
           } else {
             conclusion = 'neutral';
-            summary = '🔄 Deployment status unknown';
+            summary = 'Deployment status unknown';
             details = 'Unable to determine deployment status.';
           }
           
@@ -350,9 +341,9 @@ To enable real deployment, configure these GitHub Secrets:
           
           try {
             await github.rest.checks.create(checkData);
-            console.log(`✅ Created GitHub check: ${conclusion}`);
+            console.log(`Created GitHub check: ${conclusion}`);
           } catch (error) {
-            console.log(`⚠️ Failed to create GitHub check: ${error.message}`);
+            console.log(`Failed to create GitHub check: ${error.message}`);
           }
     
     - name: Generate deployment summary
