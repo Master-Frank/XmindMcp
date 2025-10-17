@@ -1,0 +1,32 @@
+{
+  "name": "xmind-mcp-server",
+  "version": "1.0.0",
+  "description": "XMind AI MCP Server - 智能思维导图操作",
+  "main": "xmind_mcp_server.py",
+  "scripts": {
+    "start": "python xmind_mcp_server.py",
+    "quick-start": "python quick_start.py",
+    "install-deps": "pip install fastapi uvicorn beautifulsoup4 python-docx openpyxl",
+    "dev": "python xmind_mcp_server.py --debug",
+    "test": "python tests/run_all_tests.py"
+  },
+  "keywords": [
+    "xmind",
+    "mindmap",
+    "mcp",
+    "ai",
+    "converter",
+    "fastapi"
+  ],
+  "author": "XMind MCP Project",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Master-Frank/XmindMcp.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

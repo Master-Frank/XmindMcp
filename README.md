@@ -114,9 +114,25 @@ graph TD
 
 ## 🔧 Quick Start
 
-### 1. Install Dependencies
+### ⚡ 超快速启动（推荐）
 ```bash
+# 一键启动，自动安装依赖
+python quick_start.py
+```
+
+### 🐳 Docker启动
+```bash
+# 使用docker-compose
+docker-compose up
+```
+
+### 📦 传统安装启动
+```bash
+# 1. 安装依赖
 pip install beautifulsoup4 python-docx openpyxl fastapi uvicorn
+
+# 2. 启动服务器
+python xmind_mcp_server.py
 ```
 
 ### 2. File Conversion (Standalone Mode)
