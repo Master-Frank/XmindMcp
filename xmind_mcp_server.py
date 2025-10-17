@@ -47,8 +47,8 @@ class XMindMCPServer:
         """加载配置"""
         config_file = "server_config.json"
         default_config = {
-            "host": "localhost",
-            "port": 8080,
+            "host": "0.0.0.0",  # 修复：绑定到所有网络接口，支持容器部署
+            "port": int(os.environ.get("PORT", 8080)),  # 修复：使用环境变量PORT，支持Render等平台
             "debug": False,
             "cors_origins": ["*"],
             "max_file_size": 10 * 1024 * 1024,  # 10MB
