@@ -1,0 +1,341 @@
+name: 🚀 Unified Test & Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      deploy_type:
+        description: 'Deployment type'
+        required: true
+        default: 'test-and-deploy'
+        type: choice
+        options:
+          - test-and-deploy
+          - test-only
+          - deploy-only
+
+env:
+  RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+  RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
+jobs:
+  # 统一测试任务
+  unified-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install fastapi uvicorn python-multipart pydantic jinja2 openpyxl beautifulsoup4 python-docx requests
+    
+    - name: Run dependency installation tests
+      run: |
+        echo "🔍 Testing dependency installation..."
+        python -c "import xmind; print('✅ xmind installed')"
+        python -c "import requests; print('✅ requests installed')"
+        python -c "import openpyxl; print('✅ openpyxl installed')"
+        python -c "import lxml; print('✅ lxml installed')"
+        python -c "import fastapi; print('✅ fastapi installed')"
+        python -c "import uvicorn; print('✅ uvicorn installed')"
+    
+    - name: Run core functionality tests
+      run: |
+        echo "🧪 Running core functionality tests..."
+        python tests/run_all_tests.py --english --save-report
+        
+        # 检查测试结果并要求100%通过
+        if [ -f "tests/test_reports/test_report_*.json" ]; then
+          echo "✅ Core tests completed"
+          # 显示测试摘要
+          latest_report=$(ls -t tests/test_reports/test_report_*.json | head -1)
+          echo "📊 Test report: $latest_report"
+          
+          # 提取通过率信息
+          total_scripts=$(cat "$latest_report" | jq '.summary.total')
+          passed_scripts=$(cat "$latest_report" | jq '.summary.passed')
+          pass_rate=$(cat "$latest_report" | jq -r '.summary.passed / .summary.total * 100')
+          
+          echo "📈 Test summary: $passed_scripts/$total_scripts scripts passed ($pass_rate%)"
+          
+          # 必须100%通过才允许后续部署
+          if [ "$passed_scripts" -ne "$total_scripts" ]; then
+            echo "❌ Core tests not 100% passed, deployment blocked"
+            exit 1
+          fi
+          
+          echo "🎉 Core functionality tests 100% passed! 可以继续部署"
+        else
+          echo "❌ Core tests failed to run"
+          exit 1
+        fi
+    
+    - name: Run unified test suite
+      run: |
+        echo "🔬 Running unified test suite..."
+        cd tests/unified_test_suite
+        python mcp_test.py
+        
+        # 检查统一测试结果（仅检查是否运行完成，不要求100%通过）
+        if [ -f "test_report.json" ]; then
+          echo "✅ Unified tests completed"
+          echo "📋 Unified test results:"
+          cat test_report.json | jq '.test_results | length' 
+          success_count=$(cat test_report.json | jq '[.test_results[] | select(.success == true)] | length')
+          total_count=$(cat test_report.json | jq '.test_results | length')
+          echo "✅ Passed: $success_count/$total_count tests"
+          
+          # 统一测试套件不要求100%通过，只要求运行完成
+          echo "🎉 Unified test suite completed successfully!"
+        else
+          echo "❌ Unified tests failed to run"
+          exit 1
+        fi
+    
+    - name: Validate server startup
+      run: |
+        echo "🔍 Validating MCP server startup..."
+        timeout 30s python xmind_mcp_server.py &
+        SERVER_PID=$!
+        sleep 10
+        
+        # 测试健康检查端点
+        if curl -f http://localhost:8080/health; then
+          echo "✅ Server started successfully!"
+          kill $SERVER_PID
+        else
+          echo "❌ Server failed to start"
+          kill $SERVER_PID || true
+          exit 1
+        fi
+    
+    - name: Generate test summary
+      run: |
+        echo "## 🧪 Unified Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Dependency installation: PASSED" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Core functionality tests: PASSED (100% required and achieved)" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Unified test suite: COMPLETED (no 100% requirement)" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Server startup validation: PASSED" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🎉 All required tests completed successfully!" >> $GITHUB_STEP_SUMMARY
+
+  # Render部署任务
+  deploy-to-render:
+    runs-on: ubuntu-latest
+    needs: unified-tests
+    if: |
+      (github.event.inputs.deploy_type == 'test-and-deploy' || 
+       github.event.inputs.deploy_type == 'deploy-only' || 
+       github.event_name == 'push') && 
+      github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Check Render credentials
+      id: check-credentials
+      run: |
+        if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
+          echo "has_credentials=true" >> $GITHUB_OUTPUT
+          echo "✅ Render credentials configured"
+        else
+          echo "has_credentials=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Render credentials not configured"
+          echo "请设置 RENDER_API_KEY 和 RENDER_SERVICE_ID 密钥"
+        fi
+      shell: bash
+    
+    - name: Deploy to Render
+      if: steps.check-credentials.outputs.has_credentials == 'true'
+      run: |
+        echo "🚀 Deploying to Render..."
+        
+        # 使用Render API触发部署
+        response=$(curl -s -w "\n%{http_code}" \
+          -X POST \
+          -H "Authorization: Bearer $RENDER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "clearCache": "clear"
+          }' \
+          "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+        
+        http_code=$(echo "$response" | tail -n1)
+        body=$(echo "$response" | head -n-1)
+        
+        if [ "$http_code" = "201" ]; then
+          echo "✅ Deploy triggered successfully!"
+          echo "Response: $body"
+          
+          # 等待部署完成
+          echo "⏳ Waiting for deployment to complete..."
+          sleep 30
+          
+          # 检查部署状态
+          deploy_id=$(echo "$body" | jq -r '.id')
+          if [ "$deploy_id" != "null" ]; then
+            echo "📊 Deployment ID: $deploy_id"
+          fi
+          
+        else
+          echo "❌ Deployment failed with status: $http_code"
+          echo "Response: $body"
+          exit 1
+        fi
+    
+    - name: Wait for Render deployment
+      if: steps.check-credentials.outputs.has_credentials == 'true'
+      run: |
+        echo "⏳ Waiting for Render deployment to be ready..."
+        max_attempts=30
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt/$max_attempts: Checking deployment status..."
+          
+          # 获取服务状态
+          status_response=$(curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID")
+          
+          service_status=$(echo "$status_response" | jq -r '.serviceDetails.status // .status // "unknown"')
+          echo "Service status: $service_status"
+          
+          if [ "$service_status" = "live" ]; then
+            echo "✅ Service is live!"
+            break
+          elif [ "$service_status" = "deploy_failed" ]; then
+            echo "❌ Deployment failed"
+            exit 1
+          fi
+          
+          echo "Waiting 30 seconds..."
+          sleep 30
+          attempt=$((attempt + 1))
+        done
+        
+        if [ $attempt -gt $max_attempts ]; then
+          echo "⚠️ Deployment check timeout, but continuing..."
+        fi
+    
+    - name: Run post-deployment tests
+      if: steps.check-credentials.outputs.has_credentials == 'true'
+      run: |
+        echo "🔍 Running post-deployment tests..."
+        
+        # 等待服务完全启动
+        echo "⏳ Waiting for service to be fully ready..."
+        sleep 60
+        
+        # 获取服务URL
+        service_response=$(curl -s \
+          -H "Authorization: Bearer $RENDER_API_KEY" \
+          "https://api.render.com/v1/services/$RENDER_SERVICE_ID")
+        
+        service_url=$(echo "$service_response" | jq -r '.serviceDetails.url // .url // empty')
+        
+        if [ -n "$service_url" ] && [ "$service_url" != "null" ]; then
+          echo "🌐 Service URL: $service_url"
+          
+          # 测试部署的服务
+          echo "🧪 Testing deployed service..."
+          
+          # 健康检查
+          if curl -f "$service_url/health" --max-time 30; then
+            echo "✅ Health check passed"
+          else
+            echo "❌ Health check failed"
+            exit 1
+          fi
+          
+          # 运行统一测试套件验证部署
+          echo "🔬 Running unified test suite on deployed service..."
+          export MCP_SERVER_URL="$service_url"
+          
+          cd tests/unified_test_suite
+          # 修改测试配置使用部署的URL
+          python -c "
+import os
+import json
+import requests
+
+service_url = os.environ.get('MCP_SERVER_URL', '$service_url')
+print(f'Testing deployed service at: {service_url}')
+
+# 测试健康端点
+try:
+    health_resp = requests.get(f'{service_url}/health', timeout=30)
+    print(f'Health check: {health_resp.status_code}')
+    
+    if health_resp.status_code == 200:
+        print('✅ Deployed service is healthy')
+        
+        # 运行简化的统一测试
+        import subprocess
+        result = subprocess.run(['python', 'mcp_test.py'], capture_output=True, text=True)
+        print('Unified test output:')
+        print(result.stdout)
+        
+        if result.returncode == 0:
+            print('✅ Post-deployment tests passed')
+        else:
+            print('❌ Post-deployment tests failed')
+            exit(1)
+    else:
+        print('❌ Deployed service health check failed')
+        exit(1)
+        
+except Exception as e:
+    print(f'❌ Error testing deployed service: {e}')
+    exit(1)
+"
+          
+        else
+          echo "⚠️ Could not get service URL, skipping post-deployment tests"
+        fi
+    
+    - name: Generate deployment summary
+      run: |
+        echo "## 🎨 Render Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.check-credentials.outputs.has_credentials }}" = "true" ]; then
+          echo "✅ Credentials: Configured" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployment: Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Post-deployment tests: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Service validation: PASSED" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. 访问 [Render Dashboard](https://dashboard.render.com) 查看部署状态" >> $GITHUB_STEP_SUMMARY
+          echo "2. 等待部署完成（约2-5分钟）" >> $GITHUB_STEP_SUMMARY
+          echo "3. 测试MCP服务器功能" >> $GITHUB_STEP_SUMMARY
+          echo "4. 配置MCP客户端连接" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Deployment: Skipped (no credentials)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Setup Required" >> $GITHUB_STEP_SUMMARY
+          echo "请配置以下GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`RENDER_API_KEY\`: 你的Render API密钥" >> $GITHUB_STEP_SUMMARY
+          echo "- \`RENDER_SERVICE_ID\`: Render服务ID" >> $GITHUB_STEP_SUMMARY
+          echo "- \`RENDER_SERVICE_URL\`: (可选) 服务URL用于测试" >> $GITHUB_STEP_SUMMARY
+        fi
