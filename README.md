@@ -186,7 +186,7 @@ python xmind_mcp_server.py --debug
 
 #### 🚄 Railway Cloud Deployment (Recommended)
 **One-click deploy to Railway:**
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2FMaster-Frank%2FXmindMcp)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Master-Frank/XmindMcp&envs=PORT,ENVIRONMENT,DEBUG)
 
 **Manual Deployment:**
 1. Visit [Railway](https://railway.app)

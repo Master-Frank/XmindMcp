@@ -5,7 +5,7 @@
 ## 🚄 快速部署（推荐）
 
 ### 方法1：一键部署按钮
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2FMaster-Frank%2FXmindMcp&envs=PORT%2CENVIRONMENT&PORT=8080&ENVIRONMENT=production)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Master-Frank/XmindMcp&envs=PORT,ENVIRONMENT,DEBUG)
 
 ### 方法2：GitHub连接部署
 1. 访问 [Railway官网](https://railway.app)
