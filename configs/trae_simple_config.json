@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "xmind-mcp": {
-      "command": "uvx",
-      "args": ["xmind-mcp-server"]
-    }
-  }
-}
