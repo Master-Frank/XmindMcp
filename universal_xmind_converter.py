@@ -302,13 +302,20 @@ class TextOutlineParser(BaseParser):
         topics_by_level = {}
         root_children = []
         
+        # 跳过标题行（如果标题行存在）
+        title_found = False
         for line in lines:
             line = line.rstrip('\n\r')
             if not line.strip():
                 continue
             
-            # 计算缩进级别
+            # 检查是否是标题行
             stripped_line = line.lstrip()
+            if stripped_line.strip() == title.strip() and not title_found:
+                title_found = True
+                continue  # 跳过标题行
+            
+            # 计算缩进级别
             indent_level = len(line) - len(stripped_line)
             level = self.indent_to_level(indent_level)
             title_text = stripped_line.strip('-*• ')
@@ -330,6 +337,9 @@ class TextOutlineParser(BaseParser):
                     if "children" not in parent_topic:
                         parent_topic["children"] = {"attached": []}
                     parent_topic["children"]["attached"].append(topic)
+                else:
+                    # 父层级不存在，直接添加到根节点
+                    root_children.append(topic)
         
         return create_json_structure(title, root_children)
     
@@ -851,7 +861,7 @@ def main():
     
     # 检查命令行参数
     if len(sys.argv) <= 1:
-        print("❌ 错误: 请提供输入文件路径")
+        print("[ERROR] 错误: 请提供输入文件路径")
         print("用法: python universal_xmind_converter.py <input_file>")
         print("支持的格式: .md, .txt, .html, .docx, .xlsx")
         return 1
@@ -860,7 +870,7 @@ def main():
     
     # 验证输入文件是否存在
     if not os.path.exists(input_file):
-        print(f"❌ 错误: 文件 '{input_file}' 不存在")
+        print(f"[ERROR] 错误: 文件 '{input_file}' 不存在")
         return 1
     
     # 使用ParserFactory自动检测格式并转换
@@ -884,11 +894,11 @@ def main():
         print(f"正在创建XMind文件: {output_file}")
         create_xmind_file(json_structure, output_file)
         
-        print("✅ 转换完成！")
-        print(f"📁 输出文件: {output_file}")
+        print("[SUCCESS] 转换完成！")
+        print(f"输出文件: {output_file}")
         
     except Exception as e:
-        print(f"❌ 转换失败: {str(e)}")
+        print(f"[ERROR] 转换失败: {str(e)}")
         return 1
 
 
@@ -907,29 +917,29 @@ def main():
     # 检查命令行参数
     if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
         print("=" * 60)
-        print("🧠 Universal XMind Converter - 多格式思维导图转换器")
+        print("Universal XMind Converter - 多格式思维导图转换器")
         print("=" * 60)
-        print("\n📋 支持的文件格式:")
+        print("\n支持的文件格式:")
         print("  • Markdown     (.md)     - 标题层级转换")
         print("  • 文本大纲     (.txt)    - 缩进格式大纲")
         print("  • HTML网页     (.html)   - 标题和列表结构")
         print("  • Word文档     (.docx)   - 标题样式转换")
         print("  • Excel表格    (.xlsx)   - 多列层级结构")
-        print("\n🎯 使用方法:")
+        print("\n使用方法:")
         print("  python universal_xmind_converter.py <输入文件> [输出文件]")
-        print("\n💡 示例:")
+        print("\n示例:")
         print("  python universal_xmind_converter.py document.md")
         print("  python universal_xmind_converter.py outline.txt mymap.xmind")
         print("  python universal_xmind_converter.py data.xlsx")
-        print("\n🔧 自动识别:")
+        print("\n自动识别:")
         print("  无扩展名文件会自动检测格式")
-        print("\n📦 依赖安装:")
+        print("\n依赖安装:")
         print("  pip install beautifulsoup4 python-docx openpyxl")
         print("=" * 60)
         return 0
     
     if len(sys.argv) < 2:
-        print("❌ 错误: 请提供输入文件路径")
+        print("[ERROR] 错误: 请提供输入文件路径")
         print("用法: python universal_xmind_converter.py <input_file>")
         print("\n支持的文件格式:")
         for fmt in ParserFactory.get_supported_formats():
@@ -941,17 +951,17 @@ def main():
     
     # 验证输入文件是否存在
     if not os.path.exists(input_file):
-        print(f"❌ 错误: 文件 '{input_file}' 不存在")
+        print(f"[ERROR] 错误: 文件 '{input_file}' 不存在")
         return 1
     
     # 检测文件格式
     file_format = ParserFactory.detect_format(input_file)
-    print(f"📄 检测到文件格式: {file_format}")
+    print(f"检测到文件格式: {file_format}")
     
     try:
         # 获取相应的解析器
         parser = ParserFactory.get_parser(input_file)
-        print(f"🔍 使用解析器: {parser.__class__.__name__}")
+        print(f"使用解析器: {parser.__class__.__name__}")
         
         # 解析文件
         print(f"正在解析文件: {input_file}")
@@ -971,11 +981,11 @@ def main():
         print(f"正在创建XMind文件: {output_file}")
         create_xmind_file(json_structure, output_file)
         
-        print("✅ 转换完成！")
+        print("[SUCCESS] 转换完成！")
         print(f"📁 输出文件: {output_file}")
         
     except ImportError as e:
-        print(f"❌ 缺少依赖包: {e}")
+        print(f"[ERROR] 缺少依赖包: {e}")
         print("请安装相应的依赖包:")
         print("  pip install beautifulsoup4  # HTML解析")
         print("  pip install python-docx   # Word文档解析")
@@ -983,7 +993,7 @@ def main():
         return 1
         
     except Exception as e:
-        print(f"❌ 转换失败: {e}")
+        print(f"[ERROR] 转换失败: {e}")
         import traceback
         traceback.print_exc()
         return 1

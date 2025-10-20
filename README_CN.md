@@ -129,7 +129,7 @@ docker-compose up
 ### 📦 传统安装启动
 ```bash
 # 1. 安装依赖
-pip install beautifulsoup4 python-docx openpyxl fastapi uvicorn
+pip install beautifulsoup4 python-docx openpyxl
 
 # 2. 启动服务器
 python xmind_mcp_server.py

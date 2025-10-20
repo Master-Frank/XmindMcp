@@ -66,3 +66,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# PyPI token env
+.pypi-token.env
+.env
+# Local credentials in configs
+configs/.pypi-token.env
+
+# PyPI credentials (for publishing)
+.pypirc
+pypi_token.txt
+pypirc.toml

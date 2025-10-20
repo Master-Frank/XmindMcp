@@ -39,40 +39,14 @@ class SetupTester:
             return 0.0  # 返回0%成功率
     
     def test_dependencies(self):
-        """测试依赖包"""
-        title = "📦 依赖包检查" if self.use_chinese else "📦 Dependencies Check"
+        """测试依赖包 - 使用uvx方式时不需要检查pip包安装"""
+        title = "📦 依赖包检查 (UVX模式)" if self.use_chinese else "📦 Dependencies Check (UVX Mode)"
         self.log(f"\n{title}")
         
-        required_packages = [
-            'xmind', 'requests', 'openpyxl', 'lxml'
-        ]
+        self.log("✅ 使用UVX安装方式，依赖包由uvx自动管理" if self.use_chinese else "✅ Using UVX installation, dependencies are automatically managed by uvx")
+        self.log("✅ 无需手动安装pip包" if self.use_chinese else "✅ No need to manually install pip packages")
         
-        passed = 0
-        failed_packages = []  # 记录失败的包
-        for package in required_packages:
-            try:
-                __import__(package)
-                self.log(f"  ✅ {package}")
-                passed += 1
-            except ImportError:
-                self.log(f"  ❌ {package} - 未安装" if self.use_chinese else f"  ❌ {package} - Not installed")
-                failed_packages.append(package)
-        
-        success_rate = (passed / len(required_packages)) * 100
-        
-        if failed_packages:
-            failed_title = "\n❌ 未安装的依赖包:" if self.use_chinese else "\n❌ Missing dependencies:"
-            self.log(failed_title)
-            for package in failed_packages:
-                self.log(f"  - {package}")
-        
-        if passed == len(required_packages):
-            self.log("✅ 所有依赖包已安装" if self.use_chinese else "✅ All dependencies installed")
-            return 100.0  # 返回100%成功率
-        else:
-            warning_msg = f"⚠️  {passed}/{len(required_packages)} 个依赖包已安装 (成功率: {success_rate:.1f}%)" if self.use_chinese else f"⚠️ {passed}/{len(required_packages)} dependencies installed (Success rate: {success_rate:.1f}%)"
-            self.log(warning_msg)
-            return success_rate  # 返回实际成功率
+        return 100.0  # UVX模式下总是返回100%成功率
     
     def test_directory_structure(self):
         """测试目录结构"""

@@ -6,15 +6,15 @@
 
 ### 推荐配置（直接复制使用）
 
-在Trae的MCP配置中添加：
+在Trae的MCP配置中添加（推荐使用安装后的命令）：
 
 ```json
 {
   "mcpServers": {
     "xmind-ai": {
-      "command": "cmd",
-      "args": ["/c", "cd", "d:/project/XmindMcp", "&&", "python", "start_mcp_server.py"],
-      "description": "XMind AI MCP Server - 智能思维导图操作"
+      "command": "xmind-mcp",
+      "args": [],
+      "description": "XMind MCP (stdio) - 安装即用，无需服务器"
     }
   }
 }

@@ -1,0 +1,61 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Verify version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG_REF: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import sys, tomllib
+          from pathlib import Path
+          data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
+          version = data['project']['version']
+          print('pyproject version:', version)
+          tag = sys.argv[1]
+          print('tag:', tag)
+          if tag.startswith('v'):
+              tag_version = tag[1:]
+          else:
+              tag_version = tag
+          if version != tag_version:
+              print(f"Version mismatch: pyproject={version}, tag={tag_version}")
+              sys.exit(1)
+          PY
+          echo "Version is aligned with tag: ${TAG_REF}"
+
+      - name: Build distribution
+        run: |
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages_dir: dist
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
+          verbose: true

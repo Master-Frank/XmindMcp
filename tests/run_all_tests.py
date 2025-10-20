@@ -26,7 +26,7 @@ class TestRunner:
             'test_setup.py',
             'test_core.py', 
             'test_batch.py',
-            'test_client.py'
+            'test_mcp_stdio.py'
         ]
         self.results = {}
         
@@ -56,7 +56,7 @@ class TestRunner:
             original_argv = sys.argv.copy()
             
             # 只为支持server参数的脚本设置服务器地址
-            if script_name in ['test_client.py', 'test_batch.py']:
+            if script_name in ['test_batch.py']:
                 sys.argv = [sys.argv[0], '--server', 'http://localhost:8080']
             elif script_name == 'test_core.py':
                 sys.argv = [sys.argv[0]]  # test_core.py 不需要server参数

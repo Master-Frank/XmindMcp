@@ -80,7 +80,7 @@ python tests/batch_convert_demo.py
 项目结构清晰，便于维护和扩展。
 
 ## 1. start_mcp_server.py - XMind MCP服务器启动器
-这是一个基于FastAPI的完整MCP（Model Context Protocol）服务器：
+这是一个基于 FastMCP 的 MCP 服务器（STDIO 连接）：
 
 - 服务器功能 ：提供RESTful API接口
 - 工具集成 ：整合了所有XMind相关工具（读取、创建、分析、转换、列出文件）

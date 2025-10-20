@@ -25,7 +25,7 @@ class XMindValidator:
             # 确保文件路径正确
             file_path = Path(self.xmind_file)
             if not file_path.exists():
-                print(f"❌ 文件不存在: {self.xmind_file}")
+                print(f"[ERROR] 文件不存在: {self.xmind_file}")
                 return False
                 
             # 使用Path对象处理文件路径，避免编码问题
@@ -47,13 +47,13 @@ class XMindValidator:
                     
                 return True
         except zipfile.BadZipFile as e:
-            print(f"❌ 无效的XMind文件格式: {e}")
+            print(f"[ERROR] 无效的XMind文件格式: {e}")
             return False
         except UnicodeDecodeError as e:
-            print(f"❌ 文件编码错误: {e}")
+            print(f"[ERROR] 文件编码错误: {e}")
             return False
         except Exception as e:
-            print(f"❌ 提取XMind内容失败: {e}")
+            print(f"[ERROR] 提取XMind内容失败: {e}")
             print(f"   文件路径: {self.xmind_file}")
             return False
     
@@ -89,11 +89,11 @@ class XMindValidator:
                 self.structure = self._parse_topic_recursive(primary_topic)
                 return True
                 
-            print("❌ 无法找到根主题节点")
+            print("[ERROR] 无法找到根主题节点")
             return False
             
         except Exception as e:
-            print(f"❌ 解析JSON结构失败: {e}")
+            print(f"[ERROR] 解析JSON结构失败: {e}")
             return False
     
     def _parse_topic_recursive(self, topic, level=0):
@@ -163,7 +163,7 @@ class XMindValidator:
     
     def validate(self):
         """完整验证流程"""
-        print(f"\n🔍 验证文件: {self.xmind_file}")
+        print(f"\n[VALIDATION] 验证文件: {self.xmind_file}")
         print("=" * 50)
         
         # 1. 提取内容
@@ -172,33 +172,33 @@ class XMindValidator:
         
         # 2. 解析结构
         if not self.parse_json_structure():
-            print("❌ 无法解析JSON结构")
+            print("[ERROR] 无法解析JSON结构")
             return False
         
         # 3. 基本验证
-        print("✅ 文件格式验证通过")
+        print("[SUCCESS] 文件格式验证通过")
         
         # 4. 统计信息
         total_nodes = self.count_nodes()
         all_titles = self.get_all_titles()
         max_depth = self.get_max_depth()
         
-        print(f"📊 统计信息:")
+        print(f"[STATS] 统计信息:")
         print(f"  • 总节点数: {total_nodes}")
         print(f"  • 标题数量: {len(all_titles)}")
         print(f"  • 最大深度: {max_depth}")
         
         # 5. 结构展示
-        print(f"\n🌳 结构树:")
+        print(f"\n[STRUCTURE] 结构树:")
         self.print_structure()
         
         # 6. 验证通过
-        print("✅ 结构验证通过")
+        print("[SUCCESS] 结构验证通过")
         return True
 
 def validate_all_xmind_files():
     """验证所有转换的XMind文件"""
-    print("🧪 开始验证所有XMind文件结构...")
+    print("[VALIDATION] 开始验证所有XMind文件结构...")
     print("=" * 60)
     
     # 定义要验证的文件映射 - 使用不同的输出文件名避免冲突
@@ -217,23 +217,23 @@ def validate_all_xmind_files():
     results = {}
     
     for test_name, filename in test_files.items():
-        print(f"\n📁 {test_name}: {filename}")
+        print(f"\n[FILE] {test_name}: {filename}")
         
         if os.path.exists(filename):
             validator = XMindValidator(filename)
             if validator.validate():
-                print("✅ 结构验证通过")
+                print("[SUCCESS] 结构验证通过")
                 results[test_name] = True
             else:
-                print("❌ 结构验证失败")
+                print("[ERROR] 结构验证失败")
                 results[test_name] = False
         else:
-            print(f"⚠️ 文件不存在: {filename}")
+            print(f"[WARNING] 文件不存在: {filename}")
             results[test_name] = False
     
     # 生成总结报告
     print("\n" + "=" * 60)
-    print("📋 验证总结报告:")
+    print("[REPORT] 验证总结报告:")
     print("=" * 60)
     
     passed = 0
@@ -241,17 +241,17 @@ def validate_all_xmind_files():
     
     for test_name, filename in test_files.items():
         if results[test_name]:
-            print(f"✅ 通过 {test_name}: {filename}")
+            print(f"[SUCCESS] 通过 {test_name}: {filename}")
             passed += 1
         else:
-            print(f"❌ 失败 {test_name}: {filename}")
+            print(f"[ERROR] 失败 {test_name}: {filename}")
     
-    print(f"\n📊 总体结果: {passed}/{total} 文件验证通过")
+    print(f"\n[STATS] 总体结果: {passed}/{total} 文件验证通过")
     
     if passed == total:
-        print("🎉 所有文件验证通过！")
+        print("[SUCCESS] 所有文件验证通过！")
     else:
-        print("⚠️  部分文件验证失败，需要检查转换逻辑")
+        print("[WARNING] 部分文件验证失败，需要检查转换逻辑")
 
 if __name__ == "__main__":
     import sys
@@ -263,7 +263,7 @@ if __name__ == "__main__":
             validator = XMindValidator(filename)
             validator.validate()
         else:
-            print(f"❌ 文件不存在: {filename}")
+            print(f"[ERROR] 文件不存在: {filename}")
     else:
         # 验证所有文件
         validate_all_xmind_files()

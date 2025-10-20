@@ -1,525 +1,522 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-XMind MCP服务器
-基于FastAPI的MCP服务器，提供XMind文件处理的RESTful API
+XMind MCP Server - FastMCP Implementation
+只使用真实XMind核心引擎，移除所有模拟实现
 """
 
+import logging
+import sys
 import json
 import os
-import sys
-import asyncio
-import threading
-import time
+import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
-import uvicorn
+# 导入版本信息（统一来源）
+try:
+    from xmind_mcp import __version__ as __version__
+except Exception:
+    __version__ = "0.0.0"  # 本地开发异常时回退
 
-# 导入核心引擎和AI扩展
-from xmind_core_engine import XMindCoreEngine, get_available_tools
-from xmind_ai_extensions import XMindAIExtensions
-from mcp_sse_handler import sse_handler, sse_endpoint, messages_endpoint
+# 导入真实的XMind核心引擎
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from xmind_core_engine import (
+        get_engine, 
+        read_xmind_file as core_read_xmind_file, 
+        create_mind_map as core_create_mind_map, 
+        analyze_mind_map as core_analyze_mind_map, 
+        convert_to_xmind as core_convert_to_xmind, 
+        list_xmind_files as core_list_xmind_files
+    )
+    REAL_ENGINE_AVAILABLE = True
+    logging.info("真实XMind核心引擎已加载")
+except ImportError as e:
+    REAL_ENGINE_AVAILABLE = False
+    logging.error(f"真实XMind核心引擎加载失败: {e}")
+    logging.error("MCP服务器无法启动，需要真实引擎支持")
+    sys.exit(1)
 
+# 尝试导入FastMCP，失败则回退到标准实现
+try:
+    from mcp.server.fastmcp import FastMCP, Context
+    FASTMCP_AVAILABLE = True
+    logging.info("使用FastMCP实现")
+except ImportError:
+    FASTMCP_AVAILABLE = False
+    logging.warning("FastMCP不可用，使用标准MCP实现")
+    from mcp.server import Server
+    from mcp.server.stdio import stdio_server
+    from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
 
-class CreateMindMapRequest(BaseModel):
-    """创建思维导图请求"""
-    title: str
-    topics_json: str
-    output_path: Optional[str] = None
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("XMindMCPServer")
 
+# 强制设置工作目录为项目目录
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+os.chdir(PROJECT_ROOT)
+logger.info(f"工作目录已设置为: {PROJECT_ROOT}")
 
-class ConvertFileRequest(BaseModel):
-    """转换文件请求"""
-    source_filepath: str
-    output_filepath: Optional[str] = None
-
-
-class XMindMCPServer:
-    """XMind MCP服务器"""
+class ConfigManager:
+    """配置管理器 - 处理配置文件加载和默认路径管理"""
     
     def __init__(self):
-        self.engine = XMindCoreEngine()
-        self.ai_extensions = XMindAIExtensions()
-        self.app = None
-        self.config = self._load_config()
-        self.keep_alive_enabled = os.environ.get("KEEP_ALIVE", "true").lower() == "true"
-        self.keep_alive_thread = None
+        self.config = {}
+        self.default_output_dir = None
+        self.config_file_path = None
     
-    def _load_config(self) -> Dict[str, Any]:
-        """加载配置"""
-        config_file = "server_config.json"
-        default_config = {
-            "host": "0.0.0.0",  # 修复：绑定到所有网络接口，支持容器部署
-            "port": int(os.environ.get("PORT", 8080)),  # 修复：使用环境变量PORT，支持Render等平台
-            "debug": False,
-            "cors_origins": ["*"],
-            "max_file_size": 10 * 1024 * 1024,  # 10MB
-            "allowed_extensions": [".xmind", ".txt", ".md", ".json"],
-            "ai_enabled": True,
-            "ai_model": "default"
-        }
+    def load_config(self, config_file_path: str = None) -> Dict[str, Any]:
+        """加载配置文件
         
-        if os.path.exists(config_file):
+        Args:
+            config_file_path: 配置文件路径，如果为None则使用默认路径
+            
+        Returns:
+            配置字典
+        """
+        if config_file_path is None:
+            config_file_path = os.path.join(PROJECT_ROOT, "xmind_mcp_config.json")
+        
+        self.config_file_path = config_file_path
+        
+        # 如果配置文件存在，加载它
+        if os.path.exists(config_file_path):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    loaded_config = json.load(f)
-                    default_config.update(loaded_config)
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    self.config = json.load(f)
+                logger.info(f"配置文件加载成功: {config_file_path}")
             except Exception as e:
-                print(f"警告: 无法加载配置文件 {config_file}: {e}")
+                logger.warning(f"配置文件加载失败: {e}，使用默认配置")
+                self.config = {}
+        else:
+            logger.info(f"配置文件不存在: {config_file_path}，使用默认配置")
+            self.config = {}
         
-        return default_config
+        # 设置默认输出目录
+        self._setup_default_output_dir()
+        
+        return self.config
     
-    def create_app(self) -> FastAPI:
-        """创建FastAPI应用"""
-        app = FastAPI(
-            title="XMind MCP Server",
-            description="基于FastAPI的XMind文件处理MCP服务器",
-            version="1.0.0",
-            docs_url="/docs",
-            redoc_url="/redoc"
-        )
+    def _setup_default_output_dir(self):
+        """设置默认输出目录"""
+        # 从配置中获取默认输出目录
+        config_default_dir = self.config.get("default_output_dir")
         
-        # 添加CORS中间件
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=self.config["cors_origins"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-        
-        self.app = app
-        self._setup_routes()
-        return app
+        if config_default_dir:
+            # 确保路径为绝对路径
+            if os.path.isabs(config_default_dir):
+                self.default_output_dir = config_default_dir
+            else:
+                # 相对路径则转换为相对于项目根目录的绝对路径
+                self.default_output_dir = os.path.abspath(os.path.join(PROJECT_ROOT, config_default_dir))
+            
+            logger.info(f"使用配置文件中的默认输出目录: {self.default_output_dir}")
+        else:
+            # 没有配置默认输出目录
+            self.default_output_dir = None
+            logger.info("未配置默认输出目录，输出路径为必填参数")
     
-    def _start_keep_alive(self):
-        """启动内置保活机制"""
-        if not self.keep_alive_enabled:
-            return
-            
-        def keep_alive_loop():
-            """保活循环"""
-            import urllib.request
-            import urllib.error
-            
-            host = self.config.get("host", "0.0.0.0")
-            port = self.config.get("port", 8080)
-            health_url = f"http://{host}:{port}/health"
-            
-            print(f"🔧 启动内置保活机制 - 每5分钟检查一次")
-            print(f"📍 健康检查URL: {health_url}")
-            
-            while True:
-                try:
-                    # 访问健康检查端点
-                    with urllib.request.urlopen(health_url, timeout=10) as response:
-                        if response.status == 200:
-                            print(f"✅ 保活检查成功 - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                        else:
-                            print(f"⚠️  保活检查异常 - 状态码: {response.status}")
-                except Exception as e:
-                    print(f"❌ 保活检查失败: {e}")
-                
-                # 5分钟后再次检查（避免15分钟休眠）
-                time.sleep(300)  # 300秒 = 5分钟
-        
-        # 启动保活线程
-        self.keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
-        self.keep_alive_thread.start()
+    def get_default_output_dir(self) -> Optional[str]:
+        """获取默认输出目录"""
+        return self.default_output_dir
     
-    def _setup_routes(self):
-        """设置路由"""
+    def validate_absolute_path(self, path: str) -> bool:
+        """验证路径是否为绝对路径"""
+        return os.path.isabs(path)
+
+# 全局配置管理器实例
+config_manager = ConfigManager()
+
+@dataclass
+class XMindConfig:
+    def ensure_data_dir(self):
+        """确保数据目录存在 - 现在使用相对路径"""
+        pass  # 不再需要单独的数据目录配置
+
+# 全局配置实例
+config = XMindConfig()
+
+if FASTMCP_AVAILABLE:
+    # FastMCP实现
+    @asynccontextmanager
+    async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+        """管理服务器生命周期"""
+        logger.info("XMind MCP服务器启动")
+        config.ensure_data_dir()
+        yield {}
+        logger.info("XMind MCP服务器关闭")
+
+    # 创建FastMCP服务器
+    mcp = FastMCP("XMindMCP")
+
+    @mcp.tool()
+    def read_xmind_file(ctx: Context, file_path: str) -> str:
+        """读取XMind文件内容（返回结构与统计信息）
         
-        @self.app.get("/")
-        async def root():
-            """根路径"""
-            return {
-                "message": "XMind MCP Server 正在运行",
-                "version": "1.0.0",
-                "docs_url": "/docs",
-                "tools_url": "/tools",
-                "sse_url": "/sse",
-                "messages_url": "/messages/{session_id}",
-                "keep_alive": self.keep_alive_enabled,
-                "mcp_protocol": "2024-11-05"
-            }
-        
-        @self.app.get("/health")
-        async def health():
-            """健康检查"""
-            from datetime import datetime
-            return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-        
-        @self.app.get("/sse")
-        async def sse_connect():
-            """MCP SSE连接端点"""
-            return await sse_endpoint()
-        
-        @self.app.post("/messages/{session_id}")
-        async def handle_message(session_id: str, message: Dict[str, Any]):
-            """MCP消息处理端点"""
-            return await messages_endpoint(session_id, message)
-        
-        @self.app.get("/tools")
-        async def get_tools():
-            """获取可用工具列表"""
-            try:
-                tools = get_available_tools()
-                if self.config.get("ai_enabled"):
-                    ai_tools = self.ai_extensions.get_ai_tools()
-                    tools.extend(ai_tools)
-                return {"tools": tools}
-            except Exception as e:
-                # 如果get_available_tools失败，返回核心引擎的工具
-                core_tools = self.engine.get_tools() if hasattr(self.engine, 'get_tools') else []
-                return {"tools": core_tools, "error": str(e)}
-        
-        @self.app.post("/read-file")
-        async def read_file(file: UploadFile = File(...)):
-            """读取XMind文件"""
-            try:
-                # 检查文件类型
-                if not file.filename.endswith('.xmind'):
-                    raise HTTPException(status_code=400, detail="仅支持.xmind文件")
-                
-                # 保存上传的文件
-                temp_dir = "temp_uploads"
-                if not os.path.exists(temp_dir):
-                    os.makedirs(temp_dir)
-                
-                # 安全文件名处理
-                safe_filename = self.engine._sanitize_filename(file.filename)
-                temp_filepath = os.path.join(temp_dir, safe_filename)
-                
-                # 保存文件
-                with open(temp_filepath, "wb") as f:
-                    content = await file.read()
-                    f.write(content)
-                
-                # 读取文件
-                result = self.engine.read_xmind_file(temp_filepath)
-                
-                # 清理临时文件
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
-                
-                return result
-                
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/create-mind-map")
-        async def create_mind_map(request: CreateMindMapRequest):
-            """创建思维导图"""
-            try:
-                result = self.engine.create_mind_map(request.title, request.topics_json, request.output_path)
-                return result
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/analyze-mind-map")
-        async def analyze_mind_map(file: UploadFile = File(...)):
-            """分析思维导图"""
-            try:
-                # 检查文件类型
-                if not file.filename.endswith('.xmind'):
-                    raise HTTPException(status_code=400, detail="仅支持.xmind文件")
-                
-                # 保存上传的文件
-                temp_dir = "temp_uploads"
-                if not os.path.exists(temp_dir):
-                    os.makedirs(temp_dir)
-                
-                temp_filepath = os.path.join(temp_dir, file.filename)
-                
-                # 保存文件
-                with open(temp_filepath, "wb") as f:
-                    content = await file.read()
-                    f.write(content)
-                
-                # 分析文件
-                result = self.engine.analyze_mind_map(temp_filepath)
-                
-                # 清理临时文件
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
-                
-                return result
-                
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/convert-to-xmind")
-        async def convert_to_xmind(file: UploadFile = File(...)):
-            """转换文件为XMind格式"""
-            try:
-                # 检查文件类型
-                allowed_extensions = ['.txt', '.md', '.json', '.xml']
-                file_ext = os.path.splitext(file.filename)[1].lower()
-                if file_ext not in allowed_extensions:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"不支持的文件类型。支持的类型: {', '.join(allowed_extensions)}"
-                    )
-                
-                # 保存上传的文件
-                temp_dir = "temp_uploads"
-                if not os.path.exists(temp_dir):
-                    os.makedirs(temp_dir)
-                
-                temp_filepath = os.path.join(temp_dir, file.filename)
-                
-                # 保存文件
-                with open(temp_filepath, "wb") as f:
-                    content = await file.read()
-                    f.write(content)
-                
-                # 转换文件
-                result = self.engine.convert_to_xmind(temp_filepath)
-                
-                # 清理临时文件
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
-                
-                return result
-                
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.get("/list-files")
-        async def list_files(directory: str = ".", recursive: bool = True):
-            """列出XMind文件"""
-            try:
-                result = self.engine.list_xmind_files(directory, recursive)
-                return result
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/ai-generate-topics")
-        async def ai_generate_topics(
-            topic: str = Form(...),
-            count: int = Form(5),
-            style: str = Form("creative")
-        ):
-            """AI生成主题"""
-            if not self.config.get("ai_enabled"):
-                raise HTTPException(status_code=400, detail="AI功能已禁用")
-            
-            # 输入验证
-            if not topic or len(topic.strip()) == 0:
-                raise HTTPException(status_code=400, detail="主题不能为空")
-            
-            if count <= 0 or count > 1000:  # 限制生成数量
-                raise HTTPException(status_code=400, detail="生成数量必须在1-1000之间")
-            
-            if style not in ["creative", "analytical", "structured"]:
-                raise HTTPException(status_code=400, detail="无效的风格参数")
-            
-            try:
-                result = self.ai_extensions.generate_topics(topic.strip(), count, style)
-                return result
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/ai-optimize-structure")
-        async def ai_optimize_structure(
-            file: UploadFile = File(...),
-            optimization_type: str = Form("balance")
-        ):
-            """AI优化结构"""
-            if not self.config.get("ai_enabled"):
-                raise HTTPException(status_code=400, detail="AI功能已禁用")
-            
-            try:
-                # 保存上传的文件
-                temp_dir = "temp_uploads"
-                if not os.path.exists(temp_dir):
-                    os.makedirs(temp_dir)
-                
-                temp_filepath = os.path.join(temp_dir, file.filename)
-                
-                # 保存文件
-                with open(temp_filepath, "wb") as f:
-                    content = await file.read()
-                    f.write(content)
-                
-                # 读取文件内容
-                read_result = self.engine.read_xmind_file(temp_filepath)
-                if read_result["status"] != "success":
-                    raise HTTPException(status_code=400, detail="无法读取文件")
-                
-                # AI优化
-                result = self.ai_extensions.optimize_structure(
-                    read_result["root_topic"], 
-                    optimization_type
-                )
-                
-                # 清理临时文件
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
-                
-                return result
-                
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-        
-        @self.app.post("/batch")
-        async def batch_convert(
-            files: List[UploadFile] = File(...),
-            output_dir: str = Form("output")
-        ):
-            """批量转换文件为XMind格式"""
-            try:
-                # 输出目录安全检查
-                if not output_dir or not output_dir.strip():
-                    output_dir = "output"
-                
-                # 防止路径遍历攻击
-                output_dir = os.path.normpath(output_dir)
-                if output_dir.startswith("..") or os.path.isabs(output_dir):
-                    output_dir = "output"
-                
-                # 创建输出目录
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
-                
-                results = []
-                success_count = 0
-                
-                for file in files:
-                    try:
-                        # 保存上传的文件
-                        temp_dir = "temp_uploads"
-                        if not os.path.exists(temp_dir):
-                            os.makedirs(temp_dir)
-                        
-                        # 安全文件名处理
-                        safe_filename = self.engine._sanitize_filename(file.filename)
-                        temp_filepath = os.path.join(temp_dir, safe_filename)
-                        
-                        # 保存文件
-                        with open(temp_filepath, "wb") as f:
-                            content = await file.read()
-                            f.write(content)
-                        
-                        # 转换文件
-                        result = self.engine.convert_to_xmind(temp_filepath)
-                        
-                        # 移动输出文件到指定目录
-                        if result["status"] == "success":
-                            output_filename = os.path.basename(result["output_file"])
-                            final_output_path = os.path.join(output_dir, output_filename)
-                            
-                            # 如果输出文件存在，移动它
-                            if os.path.exists(result["output_file"]):
-                                import shutil
-                                shutil.move(result["output_file"], final_output_path)
-                                result["output_file"] = final_output_path
-                            
-                            success_count += 1
-                        
-                        results.append({
-                            "filename": file.filename,
-                            "status": result["status"],
-                            "output_file": result.get("output_file", ""),
-                            "error": result.get("error", "")
-                        })
-                        
-                        # 清理临时文件
-                        if os.path.exists(temp_filepath):
-                            os.remove(temp_filepath)
-                            
-                    except Exception as e:
-                        results.append({
-                            "filename": file.filename,
-                            "status": "error",
-                            "output_file": "",
-                            "error": str(e)
-                        })
-                
-                return {
-                    "status": "success",
-                    "total_count": len(files),
-                    "success_count": success_count,
-                    "failed_count": len(files) - success_count,
-                    "results": results,
-                    "output_directory": os.path.abspath(output_dir)
-                }
-                
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
-    
-    def start_server(self, host: Optional[str] = None, port: Optional[int] = None, debug: Optional[bool] = None):
-        """启动服务器"""
-        if host is None:
-            host = self.config.get("host", "localhost")
-        if port is None:
-            port = self.config.get("port", 8080)
-        if debug is None:
-            debug = self.config.get("debug", False)
-        
-        # 创建应用
-        app = self.create_app()
-        
-        # 启动保活机制（在服务器启动前）
-        self._start_keep_alive()
-        
-        # 启动服务器
-        uvicorn.run(
-            app,
-            host=host,
-            port=port,
-            log_level="info" if not debug else "debug"
-        )
-    
-    def main(self):
-        """主函数"""
-        import argparse
-        
-        parser = argparse.ArgumentParser(description="XMind MCP Server")
-        parser.add_argument("--host", default=None, help="主机地址")
-        parser.add_argument("--port", type=int, default=None, help="端口")
-        parser.add_argument("--debug", action="store_true", help="调试模式")
-        parser.add_argument("--config", help="配置文件路径")
-        
-        args = parser.parse_args()
-        
-        # 加载自定义配置
-        if args.config:
-            try:
-                with open(args.config, 'r', encoding='utf-8') as f:
-                    custom_config = json.load(f)
-                    self.config.update(custom_config)
-            except Exception as e:
-                print(f"警告: 无法加载自定义配置文件 {args.config}: {e}")
-        
-        print(f"正在启动 XMind MCP Server...")
-        print(f"配置: host={args.host or self.config.get('host', 'localhost')}, port={args.port or self.config.get('port', 8080)}")
-        print(f"AI功能: {'启用' if self.config.get('ai_enabled') else '禁用'}")
-        print(f"文档: http://{args.host or self.config.get('host', 'localhost')}:{args.port or self.config.get('port', 8080)}/docs")
-        
+        Args:
+            file_path: XMind文件路径
+        """
         try:
-            self.start_server(host=args.host, port=args.port, debug=args.debug)
-        except KeyboardInterrupt:
-            print("\n服务器已停止")
+            # 验证文件路径
+            if not file_path:
+                return json.dumps({
+                    "status": "error",
+                    "error": "文件路径不能为空"
+                }, ensure_ascii=False)
+            
+            # 检查文件是否存在
+            if not os.path.exists(file_path):
+                return json.dumps({
+                    "status": "error",
+                    "error": f"文件不存在: {file_path}",
+                    "file_path": file_path
+                }, ensure_ascii=False)
+            
+            # 检查文件扩展名
+            if not file_path.lower().endswith('.xmind'):
+                logger.warning(f"文件扩展名不是.xmind: {file_path}")
+            
+            # 检查文件大小
+            file_size = os.path.getsize(file_path)
+            if file_size == 0:
+                return json.dumps({
+                    "status": "error",
+                    "error": "文件为空",
+                    "file_path": file_path
+                }, ensure_ascii=False)
+            
+            logger.info(f"读取XMind文件: {file_path}, 大小: {file_size} 字节")
+            
+            # 调用核心引擎读取文件
+            result = core_read_xmind_file(file_path)
+            
+            # 添加文件路径信息到结果中
+            if isinstance(result, dict):
+                result["file_path"] = file_path
+                result["file_size"] = file_size
+            
+            return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            print(f"服务器启动失败: {e}")
+            logger.error(f"读取XMind文件错误: {e}")
+            return json.dumps({
+                "status": "error",
+                "error": str(e),
+                "file_path": file_path
+            }, ensure_ascii=False)
+
+    @mcp.tool()
+    def create_mind_map(ctx: Context, title: str, topics_json: str, output_path: str = None) -> str:
+        """创建新的思维导图（支持 children/topics/subtopics 等别名，服务器自动归一化）
+        
+        Args:
+            title: 思维导图标题（作为根节点标题）
+            topics_json: 主题JSON结构（字符串或Python对象）。每个节点至少包含`title`；子节点推荐使用`children`，也兼容`topics`/`subtopics`/`nodes`/`items`（服务器会自动归一化）。必须为合法JSON结构，不要使用Markdown或纯文本。
+            output_path: 可选输出文件绝对路径；未指定时优先使用配置中的 `default_output_dir`
+        """
+        try:
+            # 修复字典参数问题 - 统一处理topics_json格式
+            if isinstance(topics_json, (dict, list)):
+                # 如果已经是Python对象，直接使用
+                topics_data = topics_json
+                logger.info(f"topics_json是Python对象: {type(topics_json)}")
+            elif isinstance(topics_json, str):
+                # 如果是字符串，尝试解析为JSON
+                try:
+                    topics_data = json.loads(topics_json)
+                    logger.info(f"topics_json字符串解析成功")
+                except json.JSONDecodeError:
+                    # 如果解析失败，创建简单的主题结构
+                    topics_data = [{"title": topics_json}]
+                    logger.info(f"topics_json作为简单字符串处理")
+            else:
+                # 其他类型，转换为字符串后处理
+                topics_data = [{"title": str(topics_json)}]
+                logger.info(f"topics_json转换为字符串: {type(topics_json)}")
+            
+            # 使用核心引擎的sanitize方法来处理文件名
+            engine = get_engine()
+            safe_title = engine._sanitize_filename(title)
+            
+            # 确定输出路径 - 新的逻辑
+            if output_path:
+                # 如果指定了输出路径，验证是否为绝对路径
+                if not config_manager.validate_absolute_path(output_path):
+                    return json.dumps({
+                        "status": "error", 
+                        "error": "输出路径必须为绝对路径",
+                        "title": title,
+                        "output_path": output_path
+                    }, ensure_ascii=False)
+                
+                final_output_path = output_path
+                output_dir = os.path.dirname(final_output_path)
+                if output_dir and not os.path.exists(output_dir):
+                    try:
+                        os.makedirs(output_dir)
+                        logger.info(f"创建输出目录: {output_dir}")
+                    except Exception as e:
+                        logger.error(f"创建输出目录失败: {str(e)}")
+                        return json.dumps({
+                            "status": "error",
+                            "error": f"无法创建输出目录: {str(e)}",
+                            "title": title
+                        }, ensure_ascii=False)
+                logger.info(f"使用指定输出路径: {final_output_path}")
+            else:
+                # 未指定输出路径，检查配置文件中的默认输出目录
+                default_output_dir = config_manager.get_default_output_dir()
+                
+                if default_output_dir is None:
+                    # 配置文件中没有指定默认输出目录
+                    return json.dumps({
+                        "status": "error",
+                        "error": "未指定输出路径且配置文件中没有默认输出目录配置",
+                        "title": title,
+                        "suggestion": "请在配置文件中设置default_output_dir或在调用时指定output_path参数"
+                    }, ensure_ascii=False)
+                
+                # 使用配置文件中的默认输出目录
+                final_output_path = os.path.join(default_output_dir, f"{safe_title}.xmind")
+                logger.info(f"使用配置文件默认输出路径: {final_output_path}")
+                
+                # 确保默认输出目录存在
+                if not os.path.exists(default_output_dir):
+                    try:
+                        os.makedirs(default_output_dir)
+                        logger.info(f"创建默认输出目录: {default_output_dir}")
+                    except Exception as e:
+                        logger.error(f"创建默认输出目录失败: {str(e)}")
+                        return json.dumps({
+                            "status": "error",
+                            "error": f"无法创建默认输出目录: {str(e)}",
+                            "title": title,
+                            "default_output_dir": default_output_dir
+                        }, ensure_ascii=False)
+            
+            # 将topics_data归一化为children结构，兼容topics/subtopics
+            def _normalize_children(obj):
+                if isinstance(obj, list):
+                    return [_normalize_children(x) for x in obj]
+                if isinstance(obj, dict):
+                    title_val = obj.get("title") or obj.get("name") or obj.get("text") or ""
+                    children_val = (
+                        obj.get("children")
+                        or obj.get("topics")
+                        or obj.get("subtopics")
+                        or obj.get("nodes")
+                        or obj.get("items")
+                    )
+                    normalized = {"title": title_val}
+                    if children_val:
+                        normalized["children"] = _normalize_children(children_val)
+                    return normalized
+                return {"title": str(obj)}
+
+            normalized_topics = _normalize_children(topics_data) if topics_data else []
+            topics_json_str = json.dumps(normalized_topics, ensure_ascii=False)
+            
+            # 调用核心引擎创建思维导图
+            result = core_create_mind_map(title, topics_json_str, final_output_path)
+            logger.info(f"创建思维导图: {title} -> {final_output_path}")
+            
+            # 验证文件是否真的被创建
+            if os.path.exists(final_output_path):
+                logger.info(f"文件创建成功，大小: {os.path.getsize(final_output_path)} 字节")
+                
+                # 修改返回格式
+                result_data = result
+                if isinstance(result_data, dict) and result_data.get("status") == "success":
+                    # 获取绝对路径
+                    abs_path = os.path.abspath(final_output_path)
+                    # 修改返回数据
+                    result_data["filename"] = os.path.basename(final_output_path)
+                    result_data["message"] = f"思维导图已创建: {abs_path}"
+                    result_data["absolute_path"] = abs_path
+                    result_data["output_path"] = final_output_path
+                    
+                    return json.dumps(result_data, ensure_ascii=False)
+                else:
+                    # 核心引擎返回失败，但仍然返回详细信息
+                    if isinstance(result_data, dict):
+                        result_data["filename"] = os.path.basename(final_output_path)
+                        result_data["absolute_path"] = os.path.abspath(final_output_path)
+                        result_data["output_path"] = final_output_path
+                    return json.dumps(result_data, ensure_ascii=False)
+            else:
+                logger.error(f"文件创建失败，路径: {final_output_path}")
+                return json.dumps({
+                    "status": "error",
+                    "error": f"文件创建失败，路径: {final_output_path}",
+                    "title": title,
+                    "output_path": final_output_path
+                }, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"创建思维导图错误: {e}")
+            return f"错误: {str(e)}"
+
+    @mcp.tool()
+    def analyze_mind_map(ctx: Context, file_path: str) -> str:
+        """分析思维导图结构（统计节点数、最大层级等）"""
+        try:
+            result = core_analyze_mind_map(file_path)
+            logger.info(f"分析思维导图: {file_path}")
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"分析思维导图错误: {e}")
+            return f"错误: {str(e)}"
+
+    @mcp.tool()
+    def convert_to_xmind(ctx: Context, source_filepath: str = None, output_filepath: str = None, source_file: str = None, output_file: str = None) -> str:
+        """将纯文本、Markdown、HTML、Word、Excel等文件转换为XMind。
+        
+        注意：不要传入JSON结构；JSON结构请使用 `create_mind_map`。
+        
+        Args:
+            source_filepath: 源文件路径（支持 .txt/.md/.html/.docx/.xlsx 等）
+            output_filepath: 可选。输出XMind文件绝对路径；未指定时自动输出到 `output/<源文件名>.xmind`
+            source_file: 兼容旧参数名（同 source_filepath）
+            output_file: 兼容旧参数名（同 output_filepath）
+        """
+        try:
+            src = source_filepath or source_file
+            out = output_filepath or output_file
+            if not src:
+                return json.dumps({
+                    "status": "error",
+                    "error": "必须提供源文件路径：source_filepath 或 source_file"
+                }, ensure_ascii=False)
+            result = core_convert_to_xmind(src, out)
+            logger.info(f"转换文件为XMind格式: {src}")
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"文件转换错误: {e}")
+            return f"错误: {str(e)}"
+
+    @mcp.tool()
+    def list_xmind_files(ctx: Context, directory: str = None, recursive: bool = True) -> str:
+        """列出XMind文件
+        
+        Args:
+            directory: 要搜索的目录，如果为None则使用配置文件中的默认输出目录
+            recursive: 是否递归遍历目录（默认 True）
+        """
+        try:
+            # 如果未指定目录，检查配置文件中的默认输出目录
+            if directory is None:
+                default_output_dir = config_manager.get_default_output_dir()
+                
+                if default_output_dir is None:
+                    # 配置文件中没有指定默认输出目录
+                    return json.dumps({
+                        "status": "error",
+                        "error": "未指定搜索目录且配置文件中没有默认输出目录配置",
+                        "suggestion": "请在配置文件中设置default_output_dir或在调用时指定directory参数"
+                    }, ensure_ascii=False)
+                
+                directory = default_output_dir
+                logger.info(f"使用配置文件默认输出目录: {directory}")
+            else:
+                # 指定了目录，验证是否为绝对路径
+                if not config_manager.validate_absolute_path(directory):
+                    return json.dumps({
+                        "status": "error",
+                        "error": "搜索目录必须为绝对路径",
+                        "directory": directory
+                    }, ensure_ascii=False)
+                logger.info(f"使用指定目录: {directory}")
+            
+            # 验证目录是否存在
+            if not os.path.exists(directory):
+                return json.dumps({
+                    "status": "error",
+                    "error": f"目录不存在: {directory}",
+                    "directory": directory
+                }, ensure_ascii=False)
+            
+            # 验证是否为目录
+            if not os.path.isdir(directory):
+                return json.dumps({
+                    "status": "error",
+                    "error": f"路径不是目录: {directory}",
+                    "directory": directory
+                }, ensure_ascii=False)
+            
+            logger.info(f"搜索XMind文件，目录: {directory}，递归: {recursive}")
+            
+            # 调用核心引擎列出文件
+            result = core_list_xmind_files(directory, recursive)
+            
+            # 添加目录信息到结果中
+            if isinstance(result, dict):
+                result["directory"] = directory
+                result["recursive"] = recursive
+            
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"列出XMind文件错误: {e}")
+            return json.dumps({
+                "status": "error",
+                "error": str(e),
+                "directory": directory if 'directory' in locals() else None
+            }, ensure_ascii=False)
+
+def main():
+    """主函数 - 支持 --mode fastmcp|stdio"""
+    parser = argparse.ArgumentParser(description='XMind MCP服务器')
+    parser.add_argument('--version', action='version', version=f'XMind MCP Server {__version__}')
+    parser.add_argument('--debug', action='store_true', help='启用调试模式')
+    parser.add_argument('--mode', choices=['fastmcp', 'stdio'], help='选择运行模式：fastmcp 或 stdio')
+    parser.add_argument('--stdio', action='store_true', help='以 STDIO 模式运行（别名）')
+    parser.add_argument('--config', help='指定配置文件路径')
+
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        print("调试模式已启用")
+
+    # 加载配置文件
+    config_manager.load_config(args.config)
+
+    requested_mode = 'fastmcp' if FASTMCP_AVAILABLE else 'stdio'
+    if args.stdio:
+        requested_mode = 'stdio'
+    if args.mode:
+        requested_mode = args.mode
+
+    if requested_mode == 'fastmcp':
+        if not FASTMCP_AVAILABLE:
+            logger.error("FastMCP 不可用，请安装 mcp[cli]>=1.3.0 或使用 --mode stdio")
+            sys.exit(1)
+        print("启动XMind MCP服务器 (FastMCP模式)")
+        logger.info("启动XMind MCP服务器 (FastMCP模式)")
+        mcp.run()
+    else:
+        print("启动XMind MCP服务器 (STDIO模式)")
+        logger.info("启动XMind MCP服务器 (STDIO模式)")
+        try:
+            # 使用已验证的STDIO实现
+            import subprocess
+            import sys
+            
+            # 运行简化的STDIO MCP服务器
+            cmd = [sys.executable, "-m", "xmind_mcp.stdio_server"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"STDIO服务器启动失败: {result.stderr}")
+                sys.exit(1)
+                
+        except Exception as e:
+            logger.error(f"STDIO 模式启动失败: {e}")
             sys.exit(1)
 
-
 if __name__ == "__main__":
-    server = XMindMCPServer()
-    server.main()
+    main()

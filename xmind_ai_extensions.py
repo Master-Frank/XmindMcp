@@ -606,20 +606,20 @@ if __name__ == "__main__":
     
     async def test_ai_extensions():
         """测试AI扩展功能"""
-        print("🧪 测试XMind AI扩展功能")
+        print("[TEST] 测试XMind AI扩展功能")
         print("=" * 50)
         
         # 创建AI扩展实例（不使用真实API）
         ai_ext = XMindAIExtensions()
         
         # 测试主题生成
-        print("\n📝 测试主题生成...")
+        print("\n[TEST] 测试主题生成...")
         context = "人工智能和机器学习"
         topics = await ai_ext.generate_topics(context, max_topics=5)
         print(f"生成的主题: {[topic.title for topic in topics]}")
         
         # 测试质量分析
-        print("\n🔍 测试质量分析...")
+        print("\n[TEST] 测试质量分析...")
         sample_mind_map = {
             "title": "AI学习路径",
             "children": [
@@ -641,22 +641,22 @@ if __name__ == "__main__":
         print(f"建议: {analysis.suggestions}")
         
         # 测试结构优化
-        print("\n🔄 测试结构优化...")
+        print("\n[TEST] 测试结构优化...")
         optimized = await ai_ext.optimize_structure(sample_mind_map)
         print(f"优化后标题: {optimized.get('title', 'N/A')}")
         
         # 测试关键词提取
-        print("\n🔑 测试关键词提取...")
+        print("\n[TEST] 测试关键词提取...")
         content = "人工智能是计算机科学的一个分支，它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式做出反应的智能机器"
         keywords = await ai_ext.extract_keywords(content, max_keywords=5)
         print(f"提取的关键词: {keywords}")
         
         # 测试内容分类
-        print("\n📊 测试内容分类...")
+        print("\n[TEST] 测试内容分类...")
         categories = await ai_ext.categorize_content(content)
         print(f"分类结果: {categories}")
         
         print("\n" + "=" * 50)
-        print("✅ AI扩展功能测试完成!")
+        print("[SUCCESS] AI扩展功能测试完成!")
     
     asyncio.run(test_ai_extensions())

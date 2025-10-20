@@ -126,13 +126,50 @@ python quick_start.py
 docker-compose up
 ```
 
-### 📦 传统安装启动
-```bash
-# 1. 安装依赖
-pip install beautifulsoup4 python-docx openpyxl fastapi uvicorn
+### 📦 UVX安装启动（推荐）
 
-# 2. 启动服务器
-python xmind_mcp_server.py
+```bash
+# 安装uv（如果尚未安装）
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 通过uvx直接运行（自动安装依赖）
+uvx xmind-mcp --mode fastmcp
+
+# 查看版本
+uvx xmind-mcp --version
+
+# 查看帮助
+uvx xmind-mcp --help
+```
+
+#### 本地开发模式
+```bash
+# 在项目目录下运行
+uvx --from . xmind-mcp --mode fastmcp
+```
+
+### 本地开发安装
+
+```bash
+# 克隆项目
+git clone https://github.com/Master-Frank/XmindMcp.git
+cd XmindMcp
+
+# 构建包
+python -m build
+
+# 本地安装
+uvx --from . xmind-mcp
+```
+
+### 📦 传统安装启动（已废弃）
+
+```bash
+# 安装依赖（不推荐）
+# pip install beautifulsoup4 python-docx openpyxl
+
+# 运行服务器（不推荐）
+# python xmind_mcp_server.py
 ```
 
 ### 2. File Conversion (Standalone Mode)
@@ -246,33 +283,41 @@ curl -X POST "http://localhost:8080/tools/read_xmind" \
 
 ### 4. IDE Integration (Trae MCP)
 
-#### Configuration Template
-Create MCP configuration in your IDE:
+#### 标准UVX配置（推荐）
 
 ```json
 {
   "mcpServers": {
-    "xmind-converter": {
-      "command": "python",
-      "args": ["<absolute_path_to_project>/xmind_mcp_server.py"],
-      "description": "XMind AI MCP"
+    "xmind-mcp": {
+      "command": "uvx",
+      "args": ["xmind-mcp"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      },
+      "description": "XMind MCP - 标准UVX安装版",
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }
 ```
 
-#### Replace Placeholders
-- `<absolute_path_to_project>` - Your project directory absolute path
-- Modify port if needed: add `"--port", "8080"` to args
+#### 本地开发配置（开发者）
 
-#### Example Configuration
 ```json
 {
   "mcpServers": {
-    "xmind-converter": {
-      "command": "python",
-      "args": ["D:/projects/xmind-converter/xmind_mcp_server.py", "--port", "8080"],
-      "description": "XMind AI MCP"
+    "xmind-mcp": {
+      "command": "uvx",
+      "args": ["--from", "d:\\project\\XmindMcp", "xmind-mcp"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      },
+      "description": "XMind MCP - 本地开发版",
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }

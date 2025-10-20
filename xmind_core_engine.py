@@ -8,12 +8,16 @@ XMind核心引擎
 import json
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # 导入现有的转换器组件
 from universal_xmind_converter import ParserFactory, create_xmind_file
 from validate_xmind_structure import XMindValidator
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class XMindCoreEngine:
@@ -28,7 +32,7 @@ class XMindCoreEngine:
         return [
             {
                 "name": "read_xmind_file",
-                "description": "读取XMind文件内容",
+                "description": "读取XMind文件内容（返回结构与统计信息）",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -39,19 +43,34 @@ class XMindCoreEngine:
             },
             {
                 "name": "create_mind_map",
-                "description": "创建新的思维导图",
+                "description": "创建新的思维导图（支持 children/topics/subtopics 等别名，服务器自动归一化）",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string", "description": "思维导图标题"},
-                        "topics_json": {"type": "string", "description": "主题结构的JSON字符串"}
+                        "title": {
+                            "type": "string",
+                            "description": "思维导图标题（将作为根节点标题）"
+                        },
+                        "topics_json": {
+                            "type": "string",
+                            "description": "主题结构的JSON字符串。每个节点至少包含`title`；子节点推荐使用`children`，也兼容`topics`/`subtopics`/`nodes`/`items`（服务器会自动归一化）。必须是合法JSON字符串，不要使用Markdown或纯文本。",
+                            "examples": [
+                                "[{\"title\":\"根\",\"children\":[{\"title\":\"子1\"},{\"title\":\"子2\",\"children\":[{\"title\":\"孙\"}]}]}]",
+                                "[{\"title\":\"根\",\"topics\":[{\"title\":\"子1\"}]}]"
+                            ]
+                        },
+                        "output_path": {
+                            "type": "string",
+                            "description": "可选。输出文件的绝对路径；未指定时使用配置 `default_output_dir`。",
+                            "examples": ["D:/project/XmindMcp/output/demo.xmind"]
+                        }
                     },
                     "required": ["title", "topics_json"]
                 }
             },
             {
                 "name": "analyze_mind_map",
-                "description": "分析思维导图结构",
+                "description": "分析思维导图结构（统计节点数、最大层级等）",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -62,13 +81,26 @@ class XMindCoreEngine:
             },
             {
                 "name": "convert_to_xmind",
-                "description": "转换文件为XMind格式",
+                "description": "将纯文本、Markdown、HTML、Word、Excel等文件转换为XMind。不要传入JSON结构；JSON结构请使用 `create_mind_map`。",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "filepath": {"type": "string", "description": "要转换的文件路径"}
+                        "source_filepath": {"type": "string", "description": "源文件路径（支持 .txt/.md/.html/.docx/.xlsx 等）", "examples": ["D:/project/XmindMcp/examples/test_outline.md", "D:/project/XmindMcp/examples/test_outline.txt"]},
+                        "output_filepath": {"type": "string", "description": "可选。输出XMind文件绝对路径；未指定时自动输出到 `output/<源文件名>.xmind`", "examples": ["D:/project/XmindMcp/output/my_outline.xmind"]}
                     },
-                    "required": ["filepath"]
+                    "required": ["source_filepath"]
+                }
+            },
+            {
+                "name": "list_xmind_files",
+                "description": "列出目录中的XMind文件",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "directory": {"type": "string", "description": "要遍历的目录，默认当前目录"},
+                        "recursive": {"type": "boolean", "description": "是否递归遍历，默认 true"}
+                    },
+                    "required": []
                 }
             }
         ]
@@ -93,38 +125,85 @@ class XMindCoreEngine:
     def read_xmind_file(self, filepath: str) -> Dict[str, Any]:
         """读取XMind文件内容"""
         try:
+            # 验证文件路径
+            if not filepath:
+                return {
+                    "status": "error",
+                    "error": "文件路径不能为空",
+                    "filename": "未知"
+                }
+            
+            # 检查文件是否存在
+            if not os.path.exists(filepath):
+                return {
+                    "status": "error",
+                    "error": f"文件不存在: {filepath}",
+                    "filename": os.path.basename(filepath)
+                }
+            
+            # 检查文件扩展名
+            if not filepath.lower().endswith('.xmind'):
+                logger.warning(f"文件扩展名不是.xmind: {filepath}")
+            
+            # 获取文件信息
+            file_size = os.path.getsize(filepath)
+            if file_size == 0:
+                return {
+                    "status": "error",
+                    "error": "文件为空",
+                    "filename": os.path.basename(filepath)
+                }
+            
+            logger.info(f"开始读取XMind文件: {filepath} (大小: {file_size} 字节)")
+            
             # 创建验证器实例
             self.validator = XMindValidator(filepath)
             
             # 使用现有的验证工具读取文件
             if not self.validator.extract_xmind_content():
-                raise Exception("无法提取XMind文件内容")
+                return {
+                    "status": "error",
+                    "error": "无法提取XMind文件内容",
+                    "filename": os.path.basename(filepath)
+                }
                 
             # 解析JSON结构
             if not self.validator.parse_json_structure():
-                raise Exception("无法解析XMind结构")
+                return {
+                    "status": "error",
+                    "error": "无法解析XMind结构",
+                    "filename": os.path.basename(filepath)
+                }
             
-            # 构建根节点结构
-            root_topic = self._build_topic_structure(self.validator.structure)
+            # 构建主题结构（验证器返回的已经是根主题结构）
+            structure = self._convert_topic_to_dict(self.validator.structure)
             
             # 获取统计信息
             total_nodes = self.validator.count_nodes()
             max_depth = self.validator.get_max_depth()
             
+            logger.info(f"XMind文件读取成功: {filepath} (节点数: {total_nodes}, 深度: {max_depth})")
+            
             return {
                 "status": "success",
-                "filename": os.path.basename(filepath),
-                "root_topic": root_topic,
-                "node_count": total_nodes,
-                "max_depth": max_depth,
-                "format": "xmind"
+                "data": {
+                    "filename": os.path.basename(filepath),
+                    "title": structure.get('title', '未命名主题'),
+                    "structure": structure,
+                    "total_nodes": total_nodes,
+                    "max_depth": max_depth,
+                    "format": "xmind",
+                    "file_size": file_size
+                }
             }
             
         except Exception as e:
+            error_msg = str(e)
+            logger.error(f"读取XMind文件失败: {filepath} - {error_msg}")
             return {
                 "status": "error",
-                "error": str(e),
-                "filename": os.path.basename(filepath)
+                "error": error_msg,
+                "filename": os.path.basename(filepath) if filepath else "未知"
             }
     
     def _build_topic_structure(self, structure: Dict[str, Any]) -> Dict[str, Any]:
@@ -132,11 +211,8 @@ class XMindCoreEngine:
         if not structure:
             return {"title": "空主题", "children": []}
         
-        # 获取根主题
-        root_sheet = structure.get('sheets', [{}])[0]
-        root_topic = root_sheet.get('rootTopic', {})
-        
-        return self._convert_topic_to_dict(root_topic)
+        # 验证器返回的结构已经是根主题结构，直接转换即可
+        return self._convert_topic_to_dict(structure)
     
     def _convert_topic_to_dict(self, topic: Dict[str, Any]) -> Dict[str, Any]:
         """转换主题为字典格式"""
@@ -145,11 +221,10 @@ class XMindCoreEngine:
             "children": []
         }
         
-        # 添加子主题
-        children = topic.get('children', {})
-        if children:
-            attached = children.get('attached', [])
-            for child in attached:
+        # 添加子主题 - 验证器返回的children已经是列表格式
+        children = topic.get('children', [])
+        if children and isinstance(children, list):
+            for child in children:
                 result["children"].append(self._convert_topic_to_dict(child))
         
         return result
@@ -160,17 +235,32 @@ class XMindCoreEngine:
             # 解析JSON格式的主题
             try:
                 topics = json.loads(topics_json)
-            except json.JSONDecodeError:
-                raise Exception("主题JSON格式无效")
+            except json.JSONDecodeError as e:
+                return {
+                    "status": "error",
+                    "error": f"主题JSON格式无效: {str(e)}",
+                    "title": title
+                }
             
             # 构建文本大纲结构
             outline_content = self._build_outline_structure(title, topics)
             
             # 创建临时文件 - 使用安全的文件名
             safe_title = self._sanitize_filename(title)
-            temp_file = f"temp_{safe_title}.txt"
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                f.write(outline_content)
+            
+            # 确定临时文件路径 - 使用当前工作目录
+            current_dir = os.getcwd()
+            temp_file = os.path.join(current_dir, f"temp_{safe_title}.txt")
+            
+            try:
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    f.write(outline_content)
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": f"无法创建临时文件: {str(e)}",
+                    "title": title
+                }
             
             # 确定输出文件路径
             if output_path:
@@ -178,37 +268,74 @@ class XMindCoreEngine:
                 output_file = output_path
                 output_dir = os.path.dirname(output_file)
                 if output_dir and not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+                    try:
+                        os.makedirs(output_dir)
+                    except Exception as e:
+                        return {
+                            "status": "error",
+                            "error": f"无法创建输出目录: {str(e)}",
+                            "title": title
+                        }
             else:
-                # 默认保存到output目录
-                output_dir = "output"
+                # 默认保存到当前工作目录的output子目录
+                output_dir = os.path.join(current_dir, "output")
                 if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+                    try:
+                        os.makedirs(output_dir)
+                    except Exception as e:
+                        return {
+                            "status": "error",
+                            "error": f"无法创建默认输出目录: {str(e)}",
+                            "title": title
+                        }
                 output_file = os.path.join(output_dir, f"{safe_title}.xmind")
             
             # 转换为XMind
-            parser = ParserFactory.get_parser(temp_file)
-            json_structure = parser.parse()
-            create_xmind_file(json_structure, output_file)
-            success = True
-            
-            # 清理临时文件
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            try:
+                parser = ParserFactory.get_parser(temp_file)
+                json_structure = parser.parse()
+                create_xmind_file(json_structure, output_file)
+                success = True
+            except Exception as e:
+                success = False
+                error_msg = str(e)
+                logger.error(f"XMind转换失败: {error_msg}")
+            finally:
+                # 清理临时文件
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except Exception as e:
+                        logger.warning(f"清理临时文件失败: {str(e)}")
             
             if success:
-                return {
-                    "status": "success",
-                    "filename": output_file,
-                    "title": title,
-                    "topics_count": len(topics),
-                    "message": f"思维导图已创建: {output_file}"
-                }
+                # 验证文件是否真的被创建
+                if os.path.exists(output_file):
+                    file_size = os.path.getsize(output_file)
+                    abs_path = os.path.abspath(output_file)
+                    return {
+                        "status": "success",
+                        "filename": os.path.basename(output_file),
+                        "title": title,
+                        "topics_count": len(topics),
+                        "message": f"思维导图已创建: {abs_path} (大小: {file_size} 字节)",
+                        "absolute_path": abs_path,
+                        "output_path": output_file,
+                        "file_size": file_size
+                    }
+                else:
+                    return {
+                        "status": "error",
+                        "error": f"XMind文件创建失败，文件不存在: {output_file}",
+                        "title": title,
+                        "output_path": output_file
+                    }
             else:
                 return {
                     "status": "error",
-                    "error": "转换失败",
-                    "title": title
+                    "error": f"XMind转换失败: {error_msg}",
+                    "title": title,
+                    "output_path": output_file
                 }
                 
         except Exception as e:
@@ -222,15 +349,24 @@ class XMindCoreEngine:
         """构建文本大纲结构"""
         lines = [title]
         
+        def _get_children(topic: Dict[str, Any]):
+            return (
+                topic.get('children')
+                or topic.get('topics')
+                or topic.get('subtopics')
+                or None
+            )
+
         def add_topics(parent_line: str, topics_list: List[Dict[str, Any]], level: int = 1):
             for topic in topics_list:
-                indent = "  " * level
-                line = f"{indent}{topic.get('title', '未命名主题')}"
+                indent = "    " * level  # 使用4个空格作为一级缩进
+                line = f"{indent}- {topic.get('title', '未命名主题')}"
                 lines.append(line)
                 
-                # 递归添加子主题
-                if 'children' in topic and topic['children']:
-                    add_topics(line, topic['children'], level + 1)
+                # 递归添加子主题（兼容别名）
+                children = _get_children(topic)
+                if children:
+                    add_topics(line, children, level + 1)
         
         add_topics(title, topics)
         return "\n".join(lines)
@@ -243,25 +379,23 @@ class XMindCoreEngine:
             if read_result["status"] != "success":
                 return read_result
             
-            # 获取统计信息
-            self.validator = XMindValidator(filepath)
-            self.validator.extract_xmind_content()
-            self.validator.parse_json_structure()
+            # 获取根主题结构
+            root_structure = read_result["data"]["structure"]
             
             # 构建统计信息
             stats = {
-                'total_nodes': self.validator.count_nodes(),
-                'max_depth': self.validator.get_max_depth(),
-                'leaf_nodes': self._count_leaf_nodes(self.validator.structure),
-                'branch_count': len(self.validator.structure.get('children', []))
+                'total_nodes': read_result["data"]["total_nodes"],
+                'max_depth': read_result["data"]["max_depth"],
+                'leaf_nodes': self._count_leaf_nodes(root_structure),
+                'branch_count': len(root_structure.get('children', []))
             }
             
             # 分析结构
             analysis = {
                 "complexity": self._calculate_complexity(stats),
-                "balance": self._calculate_balance(read_result["root_topic"]),
-                "completeness": self._calculate_completeness(read_result["root_topic"]),
-                "suggestions": self._generate_suggestions(stats, read_result["root_topic"])
+                "balance": self._calculate_balance(root_structure),
+                "completeness": self._calculate_completeness(root_structure),
+                "suggestions": self._generate_suggestions(stats, root_structure)
             }
             
             return {
@@ -344,7 +478,7 @@ class XMindCoreEngine:
             if not os.path.exists(source_filepath):
                 raise Exception(f"源文件不存在: {source_filepath}")
             
-            # 确定输出文件名
+            # 确定输出文件名 - 按照原来逻辑，默认输出到output目录
             if not output_filepath:
                 base_name = os.path.splitext(os.path.basename(source_filepath))[0]
                 output_dir = "output"
@@ -382,10 +516,27 @@ class XMindCoreEngine:
     def list_xmind_files(self, directory: str = ".", recursive: bool = True) -> Dict[str, Any]:
         """列出XMind文件"""
         try:
+            # 验证目录路径
+            if not directory:
+                directory = "."
+            
             directory = os.path.abspath(directory)
             
+            logger.info(f"开始列出XMind文件，目录: {directory}, 递归: {recursive}")
+            
             if not os.path.exists(directory):
-                raise Exception(f"目录不存在: {directory}")
+                return {
+                    "status": "error",
+                    "error": f"目录不存在: {directory}",
+                    "directory": directory
+                }
+            
+            if not os.path.isdir(directory):
+                return {
+                    "status": "error",
+                    "error": f"路径不是目录: {directory}",
+                    "directory": directory
+                }
             
             xmind_files = []
             
@@ -425,6 +576,7 @@ class XMindCoreEngine:
             }
             
         except Exception as e:
+            logger.error(f"列出XMind文件失败: {str(e)}")
             return {
                 "status": "error",
                 "error": str(e),
@@ -448,9 +600,9 @@ def read_xmind_file(filepath: str) -> Dict[str, Any]:
     """读取XMind文件"""
     return get_engine().read_xmind_file(filepath)
 
-def create_mind_map(title: str, topics_json: str) -> Dict[str, Any]:
+def create_mind_map(title: str, topics_json: str, output_path: Optional[str] = None) -> Dict[str, Any]:
     """创建思维导图"""
-    return get_engine().create_mind_map(title, topics_json)
+    return get_engine().create_mind_map(title, topics_json, output_path)
 
 def analyze_mind_map(filepath: str) -> Dict[str, Any]:
     """分析思维导图"""

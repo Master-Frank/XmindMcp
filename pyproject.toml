@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xmind-mcp"
+version = "1.2.1"
+description = "XMind MCP Server - 思维导图创建/分析/转换（别名兼容、递归列举）"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "XMind MCP Project", email = "xmind-mcp@example.com"},
+]
+keywords = ["xmind", "mindmap", "mcp", "ai", "converter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Office/Business :: Groupware",
+]
+dependencies = [
+    "mcp[cli]>=1.3.0",
+    "beautifulsoup4",
+    "python-docx",
+    "openpyxl",
+]
+
+[project.urls]
+Homepage = "https://github.com/Master-Frank/XmindMcp"
+Repository = "https://github.com/Master-Frank/XmindMcp.git"
+Issues = "https://github.com/Master-Frank/XmindMcp/issues"
+
+[project.scripts]
+xmind-mcp-server = "xmind_mcp_server:main"
+xmind-mcp = "xmind_mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "*.py",
+    "xmind_mcp/*.py",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "*.py",
+    "xmind_mcp/*.py",
+    "README.md",
+    "LICENSE",
+    "requirements.txt",
+]

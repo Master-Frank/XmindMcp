@@ -37,7 +37,7 @@
         }
     },
     
-    "postCreateCommand": "pip install -r requirements.txt || pip install fastapi uvicorn openpyxl beautifulsoup4 python-docx",
+    "postCreateCommand": "pip install -r requirements.txt",
     
     "postStartCommand": "python quick_start.py",
     
