@@ -77,3 +77,9 @@ configs/.pypi-token.env
 .pypirc
 pypi_token.txt
 pypirc.toml
+
+# Reference blender-mcp project
+blender-mcp-reference/
+
+# Trae IDE configuration
+.trae/
