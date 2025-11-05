@@ -122,90 +122,223 @@ class XMindCoreEngine:
         safe_filename = safe_filename.replace(' ', '_')
         return safe_filename
         
-    def read_xmind_file(self, filepath: str) -> Dict[str, Any]:
-        """读取XMind文件内容"""
+    def read_xmind_file(self, file_path: str):
         try:
-            # 验证文件路径
-            if not filepath:
+            validator = XMindValidator(file_path)
+            if not validator.extract_xmind_content():
                 return {
                     "status": "error",
-                    "error": "文件路径不能为空",
-                    "filename": "未知"
+                    "message": "无法提取XMind内容"
                 }
-            
-            # 检查文件是否存在
-            if not os.path.exists(filepath):
+            # JSON优先，失败再尝试XML
+            if validator.parse_json_structure():
+                structure = validator.structure
+            elif validator.parse_xml_structure():
+                structure = validator.structure
+            else:
                 return {
                     "status": "error",
-                    "error": f"文件不存在: {filepath}",
-                    "filename": os.path.basename(filepath)
+                    "message": "无法解析XMind结构（JSON与XML均失败）"
                 }
-            
-            # 检查文件扩展名
-            if not filepath.lower().endswith('.xmind'):
-                logger.warning(f"文件扩展名不是.xmind: {filepath}")
-            
-            # 获取文件信息
-            file_size = os.path.getsize(filepath)
-            if file_size == 0:
-                return {
-                    "status": "error",
-                    "error": "文件为空",
-                    "filename": os.path.basename(filepath)
-                }
-            
-            logger.info(f"开始读取XMind文件: {filepath} (大小: {file_size} 字节)")
-            
-            # 创建验证器实例
-            self.validator = XMindValidator(filepath)
-            
-            # 使用现有的验证工具读取文件
-            if not self.validator.extract_xmind_content():
-                return {
-                    "status": "error",
-                    "error": "无法提取XMind文件内容",
-                    "filename": os.path.basename(filepath)
-                }
-                
-            # 解析JSON结构
-            if not self.validator.parse_json_structure():
-                return {
-                    "status": "error",
-                    "error": "无法解析XMind结构",
-                    "filename": os.path.basename(filepath)
-                }
-            
-            # 构建主题结构（验证器返回的已经是根主题结构）
-            structure = self._convert_topic_to_dict(self.validator.structure)
-            
-            # 获取统计信息
-            total_nodes = self.validator.count_nodes()
-            max_depth = self.validator.get_max_depth()
-            
-            logger.info(f"XMind文件读取成功: {filepath} (节点数: {total_nodes}, 深度: {max_depth})")
-            
+            # 统计
+            total_nodes = validator.count_nodes()
+            max_depth = validator.get_max_depth()
+            titles = validator.get_all_titles()
             return {
                 "status": "success",
-                "data": {
-                    "filename": os.path.basename(filepath),
-                    "title": structure.get('title', '未命名主题'),
-                    "structure": structure,
+                "format": "xmind",
+                "source_format": validator.parsed_source or "unknown",
+                "data": structure,
+                "stats": {
                     "total_nodes": total_nodes,
                     "max_depth": max_depth,
-                    "format": "xmind",
-                    "file_size": file_size
+                    "titles_count": len(titles)
                 }
             }
-            
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"读取XMind文件失败: {filepath} - {error_msg}")
             return {
                 "status": "error",
-                "error": error_msg,
-                "filename": os.path.basename(filepath) if filepath else "未知"
+                "message": f"读取失败: {e}"
             }
-    
+
+    # 新增：翻译XMind标题并输出新文件
+    def translate_xmind_titles(self, source_filepath: str, output_filepath: str = None, target_lang: str = "en", overwrite: bool = False):
+        import re
+        import io
+        import zipfile
+        import json
+        import xml.etree.ElementTree as ET
+        try:
+            src_path = Path(source_filepath)
+            if not src_path.exists():
+                return {"status": "error", "message": f"源文件不存在: {source_filepath}"}
+            # 默认输出路径
+            if not output_filepath:
+                base = src_path.stem + f"_{target_lang}"
+                output_filepath = str(src_path.with_name(base + src_path.suffix))
+            out_path = Path(output_filepath)
+            if out_path.exists() and not overwrite:
+                return {"status": "error", "message": f"输出文件已存在: {output_filepath}. 需设置 overwrite=True"}
+            # 确保输出目录存在
+            try:
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            # 准备翻译器（deep-translator优先，googletrans回退）
+            translator = None
+            try:
+                from deep_translator import GoogleTranslator  # type: ignore
+                translator = GoogleTranslator(source='auto', target=target_lang)
+            except Exception:
+                try:
+                    from googletrans import Translator  # type: ignore
+                    translator = Translator()
+                except Exception as te:
+                    return {"status": "error", "message": f"加载翻译器失败: {te}"}
+            def _translate_text(text: str) -> str:
+                """Translate a single string using the available translator.
+                - Prefer deep_translator.GoogleTranslator
+                - Fallback to googletrans.Translator
+                Returns original text if translation fails.
+                """
+                try:
+                    # deep_translator path
+                    return translator.translate(text)
+                except TypeError:
+                    # googletrans path
+                    try:
+                        res = translator.translate(text, src='auto', dest=target_lang)
+                        return getattr(res, 'text', res)
+                    except Exception:
+                        return text
+                except Exception:
+                    return text
+            # 文本检测：含非ASCII字符则翻译
+            def needs_translate(text: str) -> bool:
+                if not text:
+                    return False
+                return any(ord(c) > 127 for c in text)
+            cache = {}
+            translated_count = 0
+            # 读取并处理XMind内容（JSON优先，回退XML）
+            with zipfile.ZipFile(str(src_path), 'r') as zf:
+                names = zf.namelist()
+                if 'content.json' in names:
+                    # 处理 JSON 格式
+                    json_text = zf.read('content.json').decode('utf-8')
+                    try:
+                        data = json.loads(json_text)
+                    except Exception as je:
+                        return {"status": "error", "message": f"解析 content.json 失败: {je}"}
+                    # 递归翻译所有 title
+                    def translate_json(node):
+                        nonlocal translated_count
+                        if isinstance(node, dict):
+                            tval = node.get('title')
+                            if isinstance(tval, str):
+                                raw = tval.strip()
+                                if needs_translate(raw):
+                                    new_text = cache.get(raw)
+                                    if not new_text:
+                                        new_text = _translate_text(raw)
+                                        cache[raw] = new_text
+                                    if new_text and new_text != raw:
+                                        node['title'] = new_text
+                                        translated_count += 1
+                            # also translate attributedTitle text segments if present
+                            at_list = node.get('attributedTitle')
+                            if isinstance(at_list, list):
+                                for it in at_list:
+                                    if isinstance(it, dict):
+                                        tx = it.get('text')
+                                        if isinstance(tx, str):
+                                            raw_tx = tx.strip()
+                                            if needs_translate(raw_tx):
+                                                new_tx = cache.get(raw_tx)
+                                                if not new_tx:
+                                                    new_tx = _translate_text(raw_tx)
+                                                    cache[raw_tx] = new_tx
+                                                if new_tx and new_tx != raw_tx:
+                                                    it['text'] = new_tx
+                                                    translated_count += 1
+                            # children 兼容：list 或 dict 分组
+                            children_items = []
+                            ch = node.get('children')
+                            if isinstance(ch, list):
+                                children_items.extend(ch)
+                            elif isinstance(ch, dict):
+                                for val in ch.values():
+                                    if isinstance(val, list):
+                                        children_items.extend(val)
+                            # 其他别名：topics / subtopics（可能是 list 或 dict）
+                            for key in ('topics', 'subtopics'):
+                                tp = node.get(key)
+                                if isinstance(tp, list):
+                                    children_items.extend(tp)
+                                elif isinstance(tp, dict):
+                                    for val in tp.values():
+                                        if isinstance(val, list):
+                                            children_items.extend(val)
+                            # 递归子节点
+                            for child in children_items:
+                                translate_json(child)
+                            # 递归可能的容器（如 sheets）
+                            for k, v in node.items():
+                                if isinstance(v, (dict, list)) and k not in ('children', 'topics', 'subtopics'):
+                                    translate_json(v)
+                        elif isinstance(node, list):
+                            for item in node:
+                                translate_json(item)
+                    translate_json(data)
+                    # 重新打包，替换 content.json
+                    buf = io.BytesIO()
+                    new_json_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
+                    with zipfile.ZipFile(str(src_path), 'r') as zf_in, zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf_out:
+                        for name in zf_in.namelist():
+                            if name == 'content.json':
+                                zf_out.writestr('content.json', new_json_bytes)
+                            else:
+                                zf_out.writestr(name, zf_in.read(name))
+                elif 'content.xml' in names:
+                    # 回退处理 XML 格式
+                    xml_bytes = zf.read('content.xml')
+                    xml_text = xml_bytes.decode('utf-8')
+                    ns = '{urn:xmind:xmap:xmlns:content:2.0}'
+                    root = ET.fromstring(xml_text)
+                    title_els = root.findall(f'.//{ns}title')
+                    for t in title_els:
+                        if t.text:
+                            raw = t.text.strip()
+                            if needs_translate(raw):
+                                new_text = cache.get(raw)
+                                if not new_text:
+                                    new_text = _translate_text(raw)
+                                    cache[raw] = new_text
+                                if new_text and new_text != raw:
+                                    t.text = new_text
+                                    translated_count += 1
+                    buf = io.BytesIO()
+                    new_xml = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+                    with zipfile.ZipFile(str(src_path), 'r') as zf_in, zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf_out:
+                        for name in zf_in.namelist():
+                            if name == 'content.xml':
+                                zf_out.writestr('content.xml', new_xml)
+                            else:
+                                zf_out.writestr(name, zf_in.read(name))
+                else:
+                    return {"status": "error", "message": "XMind中未找到 content.json 或 content.xml"}
+            # 写入输出文件
+            with open(str(out_path), 'wb') as f:
+                f.write(buf.getvalue())
+            return {
+                "status": "success",
+                "message": "翻译完成",
+                "translated_titles": translated_count,
+                "output_file": str(out_path)
+            }
+        except Exception as e:
+            return {"status": "error", "message": f"翻译失败: {e}"}
+
     def _build_topic_structure(self, structure: Dict[str, Any]) -> Dict[str, Any]:
         """构建主题结构"""
         if not structure:
@@ -379,13 +512,13 @@ class XMindCoreEngine:
             if read_result["status"] != "success":
                 return read_result
             
-            # 获取根主题结构
-            root_structure = read_result["data"]["structure"]
+            # 获取根主题结构（适配新的read_xmind_file返回结构）
+            root_structure = read_result["data"]
             
-            # 构建统计信息
+            # 构建统计信息（从stats字段获取）
             stats = {
-                'total_nodes': read_result["data"]["total_nodes"],
-                'max_depth': read_result["data"]["max_depth"],
+                'total_nodes': read_result.get("stats", {}).get('total_nodes', 0),
+                'max_depth': read_result.get("stats", {}).get('max_depth', 0),
                 'leaf_nodes': self._count_leaf_nodes(root_structure),
                 'branch_count': len(root_structure.get('children', []))
             }
