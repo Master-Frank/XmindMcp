@@ -118,11 +118,12 @@ class XMindCoreTester:
                         topics_json = json.dumps(test_content.get('topics', []))
                         result = core.create_mind_map(test_content.get('title', 'Test Mind Map'), topics_json)
                         
-                        if result.get('status') == 'success' and os.path.exists(result.get('filename', '')):
-                            created_file = result.get('filename')
+                        # 兼容统一返回结构：文件名位于 data.filename
+                        created_file = (result.get('data') or {}).get('filename')
+                        if result.get('status') == 'success' and created_file and os.path.exists(created_file):
                             # 测试读取刚创建的文件
-                            read_result = core.read_xmind(created_file)
-                            if read_result:
+                            read_result = core.read_xmind_file(created_file)
+                            if isinstance(read_result, dict) and read_result.get('status') == 'success':
                                 self.log("✅ 从文本创建并读取XMind文件成功" if self.use_chinese else "✅ Created and read XMind file from text successfully")
                                 tests.append(True)
                                 # 清理临时文件
@@ -149,9 +150,10 @@ class XMindCoreTester:
                 }
                 topics_json = json.dumps(test_content.get('topics', []))
                 result = core.create_mind_map(test_content.get('title', 'Test Mind Map'), topics_json)
-                if result.get('status') == 'success' and os.path.exists(result.get('filename', '')):
+                created_file = (result.get('data') or {}).get('filename')
+                if result.get('status') == 'success' and created_file and os.path.exists(created_file):
                     self.log("✅ XMind文件创建成功" if self.use_chinese else "✅ XMind file created successfully")
-                    os.remove(result.get('filename'))  # 清理测试文件
+                    os.remove(created_file)  # 清理测试文件
                     tests.append(True)
                 else:
                     self.log("❌ XMind文件创建失败 - 文件未生成" if self.use_chinese else "❌ XMind file creation failed - File not generated")
@@ -320,7 +322,9 @@ class XMindCoreTester:
             try:
                 if created_file and os.path.exists(created_file):
                     read_content = core.read_xmind_file(created_file)
-                    if read_content and read_content.get('status') == 'success' and 'root_topic' in read_content:
+                    # 统一返回结构：数据位于 data，结构字段为 structure
+                    data_block = read_content.get('data') if isinstance(read_content, dict) else None
+                    if data_block and read_content.get('status') == 'success' and 'structure' in data_block:
                         self.log("✅ 测试文件读取成功" if self.use_chinese else "✅ Test file read successfully")
                         tests.append(True)
                     else:

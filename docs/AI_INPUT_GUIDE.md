@@ -52,7 +52,7 @@
 
 ## 4. 输出路径与工作目录
 - 建议显式传入绝对路径 `output_path`（例如 `D:/project/XmindMcp/output/xxx.xmind`）
-- 若未传入，服务器使用配置文件中的 `default_output_dir`（见 `configs/xmind_mcp_config.json`）并自动创建目录
+- 若未传入，服务器使用默认绝对输出目录（通过 MCP 配置的 `env` 或 CLI `--default-output-dir` 设置）；未配置默认目录时，调用必须提供绝对输出路径；相对路径会被拒绝。
 
 ## 5. 快速自检与验证
 - 生成后调用 `analyze_mind_map(filepath)` 或 `read_xmind_file(filepath)`

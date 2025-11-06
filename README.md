@@ -40,7 +40,7 @@ XmindMcp/
 ├── xmind_mcp/                    # Package entry (`xmind-mcp`)
 │   ├── __init__.py
 │   └── __main__.py
-└── xmind_mcp_config.json         # Server config (relative paths preferred)
+└── configs/mcp_config.json       # MCP server configuration (env only)
 ```
 
 ## 🔄 Architecture Overview
@@ -159,7 +159,7 @@ python universal_xmind_converter.py examples/ --batch --format markdown,html,txt
 ```python
 convert_to_xmind({
   "source_filepath": "examples/test_markdown.md"
-  # omit output_filepath to write to project-relative "output/"
+  # omit output_filepath to use the server's default absolute output directory (if configured)
 })
 ```
 
@@ -168,7 +168,7 @@ convert_to_xmind({
 create_mind_map({
   "title": "Project Plan",
   "topics_json": [{"title": "Milestone 1"}, {"title": "Milestone 2"}]
-  # do not pass absolute output_path; set default_output_dir in xmind_mcp_config.json
+  # do not pass output_path if a default absolute output directory is configured
 })
 ```
 
@@ -180,9 +180,9 @@ analyze_mind_map({
 ```
 
 ## ⚙️ Paths & Configuration
-- No absolute paths in examples or IDE configs; prefer project-relative paths.
-- Set `default_output_dir` in `xmind_mcp_config.json` using a relative path like `"output"`.
-- Some tools accept an explicit `output_path`; prefer relying on the default output directory to avoid absolute paths.
+- Examples in docs use project-relative paths for readability.
+- For MCP output tools, configure a default absolute output directory via MCP config env (`configs/mcp_config.json`) or CLI `--default-output-dir`.
+- If no default is configured, pass an explicit absolute `output_path`/`output_filepath` in tool calls; relative paths are rejected by MCP output tools.
 
 ## 🧪 Run Tests
 ```bash

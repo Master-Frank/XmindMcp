@@ -205,22 +205,28 @@ curl -X POST "http://localhost:8080/tools/list_xmind_files" \
 }
 ```
 
-## 配置选项
+## 配置选项（MCP）
 
-服务器支持配置文件 `xmind_mcp_config.json`：
+通过 IDE 的 `configs/mcp_config.json` 设置环境变量，或在命令行使用 `--default-output-dir`：
 
 ```json
 {
-    "server": {
-        "port": 8080,
-        "host": "localhost"
-    },
-    "ai": {
-        "enabled": true,
-        "api_key": "your_api_key_here"
+  "mcpServers": {
+    "Xmind": {
+      "command": "uvx",
+      "args": ["xmind-mcp", "--mode", "fastmcp"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "XMIND_MCP_BASE_DIR": ".",
+        "XMIND_MCP_DEFAULT_OUTPUT_DIR": "output"
+      }
     }
+  }
 }
 ```
+
+也可以在命令行指定绝对路径：`uvx xmind-mcp --mode fastmcp --default-output-dir D:/abs/output`
 
 ## PowerShell 使用示例
 

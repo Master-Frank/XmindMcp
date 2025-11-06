@@ -7,7 +7,7 @@ XMind AI扩展功能模块
 
 import json
 import re
-import random
+import os
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -18,6 +18,17 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+
+
+def _parse_env_bool(val: Optional[str]) -> bool:
+    """解析布尔型环境变量，支持 1/true/yes/on."""
+    if val is None:
+        return False
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# AI 功能默认关闭；通过环境变量 XMIND_ENABLE_AI 显式开启
+DEFAULT_AI_ENABLED = _parse_env_bool(os.getenv("XMIND_ENABLE_AI", "0"))
 
 
 class AIFunction(Enum):
@@ -59,17 +70,23 @@ class AIMindMapAnalysis:
 class XMindAIExtensions:
     """XMind AI扩展功能类"""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4", enable_ai: Optional[bool] = None):
         self.api_key = api_key
         self.model = model
         self.openai_client = None
+        # AI 开关：默认取环境变量；允许在构造函数中显式覆盖
+        self.ai_enabled = DEFAULT_AI_ENABLED if enable_ai is None else bool(enable_ai)
         
-        if OPENAI_AVAILABLE and api_key:
+        if self.ai_enabled and OPENAI_AVAILABLE and api_key:
             self.openai_client = openai.OpenAI(api_key=api_key)
     
     def is_ai_available(self) -> bool:
         """检查AI功能是否可用"""
-        return OPENAI_AVAILABLE and self.openai_client is not None
+        return self.ai_enabled and OPENAI_AVAILABLE and self.openai_client is not None
+
+    def is_ai_enabled(self) -> bool:
+        """检查 AI 功能是否已启用（环境/构造函数开关）。"""
+        return self.ai_enabled
     
     async def generate_topics(
         self, 
@@ -194,6 +211,9 @@ class XMindAIExtensions:
     
     def get_ai_tools(self) -> List[Dict[str, Any]]:
         """获取AI工具列表"""
+        # 默认关闭：不暴露任何 AI 工具端点
+        if not self.ai_enabled:
+            return []
         return [
             {
                 "name": "ai_generate_topics",
@@ -603,6 +623,7 @@ class XMindAIExtensions:
 # 使用示例和测试
 if __name__ == "__main__":
     import asyncio
+    import sys
     
     async def test_ai_extensions():
         """测试AI扩展功能"""
@@ -658,5 +679,10 @@ if __name__ == "__main__":
         
         print("\n" + "=" * 50)
         print("[SUCCESS] AI扩展功能测试完成!")
+    
+    # 示例默认关闭：需显式开启 XMIND_ENABLE_AI
+    if not _parse_env_bool(os.getenv("XMIND_ENABLE_AI", "0")):
+        print("[INFO] AI扩展示例默认关闭。设置环境变量 XMIND_ENABLE_AI=1 以启用示例。")
+        sys.exit(0)
     
     asyncio.run(test_ai_extensions())

@@ -71,112 +71,103 @@ class ClientTester:
         title = "📁 文件操作测试" if self.use_chinese else "📁 File Operations Test"
         self.log(f"\n{title}")
         
-        # 测试实际的API端点（使用文件上传）
-        tests = [
-            {
-                'name': '读取XMind文件',
-                'name_en': 'Read XMind File',
-                'endpoint': '/read-file',
-                'method': 'POST',
-                'file_upload': True,
-                'file_path': 'output/test_txt.xmind'
-            },
-            {
-                'name': '转换为Markdown',
-                'name_en': 'Convert to Markdown',
-                'endpoint': '/convert-to-xmind',
-                'method': 'POST',
-                'file_upload': True,
-                'file_path': 'output/test_markdown.xmind'
-            },
-            {
-                'name': '转换为HTML',
-                'name_en': 'Convert to HTML',
-                'endpoint': '/convert-to-xmind',
-                'method': 'POST',
-                'file_upload': True,
-                'file_path': 'output/test_html.xmind'
-            }
-        ]
-        
+        # 使用真实示例路径与JSON请求，避免模拟数据/文件上传
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        source_filepath = os.path.join(base_dir, 'examples', 'test_outline.txt')
+        output_filepath = os.path.join(base_dir, 'output', 'test_client_outline.xmind')
+
         passed = 0
-        failed_tests = []  # 记录失败的测试
-        for test in tests:
-            test_name = test['name'] if self.use_chinese else test['name_en']
-            try:
-                # 实际API调用（文件上传）
-                if test['method'] == 'POST' and test.get('file_upload'):
-                    # 创建测试文件
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(suffix='.xmind', delete=False) as tmp_file:
-                        # 创建最小化的XMind文件内容
-                        test_content = b'PK'  # ZIP文件头，模拟XMind文件
-                        tmp_file.write(test_content)
-                        tmp_file_path = tmp_file.name
-                    
-                    try:
-                        with open(tmp_file_path, 'rb') as f:
-                            files = {'file': ('test.xmind', f, 'application/x-xmind')}
-                            response = requests.post(
-                                f"{self.server_url}{test['endpoint']}",
-                                files=files,
-                                timeout=30
-                            )
-                    finally:
-                        # 清理临时文件
-                        if os.path.exists(tmp_file_path):
-                            os.remove(tmp_file_path)
-                else:
-                    response = requests.get(
-                        f"{self.server_url}{test['endpoint']}",
-                        timeout=10
-                    )
-                
-                if response.status_code in [200, 400, 422]:  # 接受有效错误响应
-                    self.log(f"  ✅ {test_name}")
-                    passed += 1
-                    
-                    self.test_results.append({
-                        'test': f"file_{test['name']}",
-                        'status': 'passed',
-                        'response_time': response.elapsed.total_seconds() * 1000
-                    })
-                else:
-                    self.log(f"  ❌ {test_name}: HTTP {response.status_code}")
-                    failed_tests.append(f"{test_name} (HTTP {response.status_code})")
-                    
-                    self.test_results.append({
-                        'test': f"file_{test['name']}",
-                        'status': 'failed',
-                        'error': f'HTTP {response.status_code}'
-                    })
-                
-            except Exception as e:
-                self.log(f"  ❌ {test_name}: {e}")
-                failed_tests.append(f"{test_name} ({e})")
-                
+        total = 2
+        failed_tests = []
+
+        # 1) 转换txt到xmind（工具端点）
+        try:
+            convert_resp = requests.post(
+                f"{self.server_url}/tools/convert_to_xmind",
+                json={
+                    "source_filepath": source_filepath,
+                    "output_filepath": output_filepath
+                },
+                timeout=30
+            )
+            ok = convert_resp.status_code == 200 and (convert_resp.json() or {}).get('status') == 'success'
+            if ok:
+                self.log("  ✅ 转换为XMind")
+                passed += 1
                 self.test_results.append({
-                    'test': f"file_{test['name']}",
-                    'status': 'failed',
-                    'error': str(e)
+                    'test': 'file_convert_to_xmind',
+                    'status': 'passed',
+                    'response_time': convert_resp.elapsed.total_seconds() * 1000
                 })
-        
-        success_rate = (passed / len(tests)) * 100
-        
+            else:
+                self.log(f"  ❌ 转换为XMind: HTTP {convert_resp.status_code}")
+                failed_tests.append(f"Convert to XMind (HTTP {convert_resp.status_code})")
+                self.test_results.append({
+                    'test': 'file_convert_to_xmind',
+                    'status': 'failed',
+                    'error': f'HTTP {convert_resp.status_code}'
+                })
+        except Exception as e:
+            self.log(f"  ❌ 转换为XMind: {e}")
+            failed_tests.append(f"Convert to XMind ({e})")
+            self.test_results.append({
+                'test': 'file_convert_to_xmind',
+                'status': 'failed',
+                'error': str(e)
+            })
+
+        # 2) 读取转换后的文件（工具端点）
+        try:
+            read_resp = requests.post(
+                f"{self.server_url}/tools/read_xmind_file",
+                json={
+                    "file_path": output_filepath,
+                    "format": "json"
+                },
+                timeout=30
+            )
+            ok = read_resp.status_code == 200 and (read_resp.json() or {}).get('status') == 'success'
+            if ok:
+                self.log("  ✅ 读取XMind文件")
+                passed += 1
+                self.test_results.append({
+                    'test': 'file_read_xmind',
+                    'status': 'passed',
+                    'response_time': read_resp.elapsed.total_seconds() * 1000
+                })
+            else:
+                self.log(f"  ❌ 读取XMind文件: HTTP {read_resp.status_code}")
+                failed_tests.append(f"Read XMind (HTTP {read_resp.status_code})")
+                self.test_results.append({
+                    'test': 'file_read_xmind',
+                    'status': 'failed',
+                    'error': f'HTTP {read_resp.status_code}'
+                })
+        except Exception as e:
+            self.log(f"  ❌ 读取XMind文件: {e}")
+            failed_tests.append(f"Read XMind ({e})")
+            self.test_results.append({
+                'test': 'file_read_xmind',
+                'status': 'failed',
+                'error': str(e)
+            })
+
+        success_rate = (passed / total) * 100
+
         if failed_tests:
             failed_title = "\n❌ 失败的文件操作:" if self.use_chinese else "\n❌ Failed file operations:"
             self.log(failed_title)
             for failed_test in failed_tests:
                 self.log(f"  - {failed_test}")
-        
-        if passed == len(tests):
+
+        if passed == total:
             success_msg = "✅ 所有文件操作测试通过" if self.use_chinese else "✅ All file operations tests passed"
             self.log(success_msg)
-            return 100.0  # 返回100%成功率
+            return 100.0
         else:
-            warning_msg = f"⚠️  {passed}/{len(tests)} 个文件操作测试通过 (成功率: {success_rate:.1f}%)" if self.use_chinese else f"⚠️ {passed}/{len(tests)} file operations tests passed (Success rate: {success_rate:.1f}%)"
+            warning_msg = f"⚠️  {passed}/{total} 个文件操作测试通过 (成功率: {success_rate:.1f}%)" if self.use_chinese else f"⚠️ {passed}/{total} file operations tests passed (Success rate: {success_rate:.1f}%)"
             self.log(warning_msg)
-            return success_rate  # 返回实际成功率
+            return success_rate
     
     def test_api_endpoints(self):
         """测试API端点"""
@@ -185,8 +176,8 @@ class ClientTester:
         
         endpoints = [
             {'path': '/health', 'name': '健康检查', 'name_en': 'Health Check', 'method': 'GET'},
-            {'path': '/read-file', 'name': '文件读取', 'name_en': 'File Read', 'method': 'POST'},
-            {'path': '/convert-to-xmind', 'name': '文件转换', 'name_en': 'File Conversion', 'method': 'POST'},
+            {'path': '/tools/read_xmind_file', 'name': '文件读取', 'name_en': 'File Read', 'method': 'POST'},
+            {'path': '/tools/convert_to_xmind', 'name': '文件转换', 'name_en': 'File Conversion', 'method': 'POST'},
             {'path': '/tools', 'name': '工具列表', 'name_en': 'Tools List', 'method': 'GET'}
         ]
         
@@ -197,8 +188,14 @@ class ClientTester:
             try:
                 # 实际API测试
                 if endpoint['method'] == 'POST':
-                    # 对于POST端点，使用测试数据
-                    test_data = {'file_path': 'output/test_txt.xmind', 'format': 'json'}
+                    # 对于POST端点，使用真实路径的JSON数据
+                    base_dir = os.path.dirname(os.path.dirname(__file__))
+                    output_filepath = os.path.join(base_dir, 'output', 'test_client_outline.xmind')
+                    if 'read_xmind_file' in endpoint['path']:
+                        test_data = {'file_path': output_filepath, 'format': 'json'}
+                    else:
+                        source_filepath = os.path.join(base_dir, 'examples', 'test_outline.txt')
+                        test_data = {'source_filepath': source_filepath, 'output_filepath': output_filepath}
                     response = requests.post(
                         f"{self.server_url}{endpoint['path']}",
                         json=test_data,

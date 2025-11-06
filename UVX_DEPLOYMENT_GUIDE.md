@@ -37,7 +37,7 @@ uvx xmind-mcp --mode fastmcp
 - `--help`: 显示帮助信息
 - `--mode {fastmcp,stdio}`: 选择运行模式（推荐使用fastmcp）
 - `--debug`: 启用调试模式
-- `--config CONFIG`: 指定配置文件路径
+  
 
 ## 功能特性
 ✅ **思维导图创建**: 创建新的XMind思维导图
@@ -47,7 +47,9 @@ uvx xmind-mcp --mode fastmcp
 ✅ **MCP工具集成**: 完整的MCP服务器功能
 
 ## 配置
-服务器支持配置文件，可以指定默认输出目录等设置。配置文件路径可以通过`--config`参数指定。
+服务器支持通过环境变量或 CLI 参数配置默认输出目录：
+- 环境变量：`XMIND_MCP_BASE_DIR`（基准绝对目录）、`XMIND_MCP_DEFAULT_OUTPUT_DIR`（默认输出目录，可为相对路径，与基准拼接）
+- CLI 参数：`--default-output-dir` 指定绝对路径（优先级高于环境变量）
 
 ## 使用示例
 ```bash
@@ -57,14 +59,15 @@ uvx --from . xmind-mcp-server --mode fastmcp
 # 带调试模式
 uvx --from . xmind-mcp --mode fastmcp --debug
 
-# 指定配置文件
-uvx --from . xmind-mcp --mode fastmcp --config /path/to/config.json
+# 指定默认输出目录（CLI）
+uvx --from . xmind-mcp --mode fastmcp --default-output-dir /abs/path/to/output
 ```
 
 ## 注意事项
 - 推荐使用FastMCP模式，性能更好
 - 确保使用绝对路径作为文件参数
 - 输出目录会自动创建（如果不存在）
+- 若未配置默认输出目录，输出型工具必须传入绝对输出路径；相对路径会被拒绝。
 
 ## 故障排除
 如果遇到问题，请检查：

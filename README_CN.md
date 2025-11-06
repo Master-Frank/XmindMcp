@@ -40,7 +40,7 @@ XmindMcp/
 ├── xmind_mcp/                    # 包入口（`xmind-mcp`）
 │   ├── __init__.py
 │   └── __main__.py
-└── xmind_mcp_config.json         # 服务器配置（推荐使用相对路径）
+└── configs/mcp_config.json       # MCP 服务配置（通过 env 设置）
 ```
 
 ## 🔄 架构概览
@@ -159,7 +159,7 @@ python universal_xmind_converter.py examples/ --batch --format markdown,html,txt
 ```python
 convert_to_xmind({
   "source_filepath": "examples/test_markdown.md"
-  # 不指定 output_filepath，默认写入项目相对的 "output/"
+  # 不指定 output_filepath 时，使用服务器配置的默认绝对输出目录（若已配置）
 })
 ```
 
@@ -168,7 +168,7 @@ convert_to_xmind({
 create_mind_map({
   "title": "项目计划",
   "topics_json": [{"title": "里程碑1"}, {"title": "里程碑2"}]
-  # 不传绝对路径；在 xmind_mcp_config.json 中设置 default_output_dir
+  # 若已配置默认绝对输出目录，则无需传入 output_path
 })
 ```
 
@@ -180,9 +180,9 @@ analyze_mind_map({
 ```
 
 ## ⚙️ 路径与配置
-- 项目示例与 IDE 配置禁止使用绝对路径；优先使用相对路径。
-- 在 `xmind_mcp_config.json` 中将 `default_output_dir` 设置为相对路径（如 `"output"`）。
-- 某些工具支持显式 `output_path`；为遵守路径规范，推荐使用默认输出目录而非传入绝对路径。
+- 文档示例使用相对路径以提高可读性。
+- MCP 输出型工具需使用绝对输出目录：通过 IDE 的 `configs/mcp_config.json` 中 `env` 或 CLI `--default-output-dir` 配置为绝对路径。
+- 如果未配置默认输出目录，调用工具时必须传入绝对的 `output_path`/`output_filepath`；相对路径会被拒绝。
 
 ## 🧪 运行测试
 ```bash

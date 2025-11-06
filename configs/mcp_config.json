@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "Xmind": {
+      "command": "uvx",
+      "args": [
+        "xmind-mcp==1.3.8",
+        "--mode",
+        "fastmcp",
+        "--default-output-dir",
+        "D:\\project\\XmindMcp\\output"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "XMIND_MCP_DEFAULT_OUTPUT_DIR": "D:\\project\\XmindMcp\\output"
+      }
+    }
+  }
+}

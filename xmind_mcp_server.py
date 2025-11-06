@@ -61,78 +61,147 @@ logger = logging.getLogger("XMindMCPServer")
 
 # 强制设置工作目录为项目目录
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-os.chdir(PROJECT_ROOT)
-logger.info(f"工作目录已设置为: {PROJECT_ROOT}")
+# 保持工作目录稳定但不在日志中暴露绝对路径
+try:
+    os.chdir(PROJECT_ROOT)
+    logger.info("工作目录已设置")
+except Exception:
+    # 若切换失败，保持现状，不暴露路径
+    logger.warning("工作目录设置失败，继续使用当前目录")
 
-class ConfigManager:
-    """配置管理器 - 处理配置文件加载和默认路径管理"""
-    
-    def __init__(self):
-        self.config = {}
-        self.default_output_dir = None
-        self.config_file_path = None
-    
-    def load_config(self, config_file_path: str = None) -> Dict[str, Any]:
-        """加载配置文件
-        
-        Args:
-            config_file_path: 配置文件路径，如果为None则使用默认路径
-            
-        Returns:
-            配置字典
-        """
-        if config_file_path is None:
-            config_file_path = os.path.join(PROJECT_ROOT, "xmind_mcp_config.json")
-        
-        self.config_file_path = config_file_path
-        
-        # 如果配置文件存在，加载它
-        if os.path.exists(config_file_path):
-            try:
-                with open(config_file_path, 'r', encoding='utf-8') as f:
-                    self.config = json.load(f)
-                logger.info(f"配置文件加载成功: {config_file_path}")
-            except Exception as e:
-                logger.warning(f"配置文件加载失败: {e}，使用默认配置")
-                self.config = {}
-        else:
-            logger.info(f"配置文件不存在: {config_file_path}，使用默认配置")
-            self.config = {}
-        
-        # 设置默认输出目录
-        self._setup_default_output_dir()
-        
-        return self.config
-    
-    def _setup_default_output_dir(self):
-        """设置默认输出目录"""
-        # 从配置中获取默认输出目录
-        config_default_dir = self.config.get("default_output_dir")
-        
-        if config_default_dir:
-            # 确保路径为绝对路径
-            if os.path.isabs(config_default_dir):
-                self.default_output_dir = config_default_dir
-            else:
-                # 相对路径则转换为相对于项目根目录的绝对路径
-                self.default_output_dir = os.path.abspath(os.path.join(PROJECT_ROOT, config_default_dir))
-            
-            logger.info(f"使用配置文件中的默认输出目录: {self.default_output_dir}")
-        else:
-            # 没有配置默认输出目录
-            self.default_output_dir = None
-            logger.info("未配置默认输出目录，输出路径为必填参数")
-    
-    def get_default_output_dir(self) -> Optional[str]:
-        """获取默认输出目录"""
-        return self.default_output_dir
-    
-    def validate_absolute_path(self, path: str) -> bool:
-        """验证路径是否为绝对路径"""
-        return os.path.isabs(path)
+DEFAULT_OUTPUT_DIR: Optional[str] = None
 
-# 全局配置管理器实例
-config_manager = ConfigManager()
+def init_default_output_dir(cli_default_output_dir: Optional[str] = None) -> None:
+    """初始化默认输出目录，仅使用命令行参数或环境变量。
+    优先级：CLI --default-output-dir > XMIND_MCP_DEFAULT_OUTPUT_DIR > XMIND_MCP_BASE_DIR + 相对目录
+    """
+    global DEFAULT_OUTPUT_DIR
+
+    env_default_dir = os.getenv("XMIND_MCP_DEFAULT_OUTPUT_DIR")
+    env_base_dir = os.getenv("XMIND_MCP_BASE_DIR")
+
+    # CLI 优先
+    if cli_default_output_dir:
+        if os.path.isabs(cli_default_output_dir):
+            DEFAULT_OUTPUT_DIR = cli_default_output_dir
+            logger.info("默认输出目录来源：CLI --default-output-dir")
+            return
+        elif env_base_dir and os.path.isabs(env_base_dir):
+            DEFAULT_OUTPUT_DIR = os.path.join(env_base_dir, cli_default_output_dir)
+            logger.info("默认输出目录来源：CLI 相对目录 + XMIND_MCP_BASE_DIR")
+            return
+        else:
+            logger.warning("CLI 默认输出目录无效（必须为绝对路径或提供绝对基准目录）")
+
+    # 环境变量次之
+    if env_default_dir:
+        if os.path.isabs(env_default_dir):
+            DEFAULT_OUTPUT_DIR = env_default_dir
+            logger.info("默认输出目录来源：环境变量 XMIND_MCP_DEFAULT_OUTPUT_DIR")
+            return
+        elif env_base_dir and os.path.isabs(env_base_dir):
+            DEFAULT_OUTPUT_DIR = os.path.join(env_base_dir, env_default_dir)
+            logger.info("默认输出目录来源：XMIND_MCP_BASE_DIR + 相对默认目录")
+            return
+        else:
+            logger.warning("环境变量默认输出目录无效（必须为绝对路径或提供绝对基准目录）")
+
+    # 未配置默认输出目录
+    DEFAULT_OUTPUT_DIR = None
+    logger.info("未设置默认输出目录，输出型工具需要显式传入绝对路径")
+
+def get_default_output_dir() -> Optional[str]:
+    return DEFAULT_OUTPUT_DIR
+
+def validate_absolute_path(path: str) -> bool:
+    return os.path.isabs(path)
+
+# 统一的输出路径解析与目录创建（仅接受绝对路径）
+def _resolve_output_path(output_path: Optional[str], default_filename: str) -> Dict[str, Any]:
+    """集中解析输出路径：
+    - 若传入 `output_path`，必须为绝对路径；必要时创建父目录
+    - 若未传入，则使用配置中的默认绝对目录并拼接 `default_filename`
+    返回统一结构：
+    {"ok": True, "path": final_output_path} 或 {"ok": False, "error": {status/message/suggestion}}
+    """
+    try:
+        if output_path:
+            if not validate_absolute_path(output_path):
+                return {
+                    "ok": False,
+                    "error": {
+                        "status": "error",
+                        "message": "输出路径必须为绝对路径"
+                    }
+                }
+            final_out = output_path
+            out_dir = os.path.dirname(final_out)
+            if out_dir and not os.path.exists(out_dir):
+                try:
+                    os.makedirs(out_dir)
+                    logger.info("已创建输出目录")
+                except Exception:
+                    logger.error("创建输出目录失败")
+                    return {
+                        "ok": False,
+                        "error": {
+                            "status": "error",
+                            "message": "无法创建输出目录"
+                        }
+                    }
+            logger.info("使用指定输出路径")
+            return {"ok": True, "path": final_out}
+        else:
+            default_output_dir = get_default_output_dir()
+            if default_output_dir is None:
+                return {
+                    "ok": False,
+                    "error": {
+                        "status": "error",
+                        "message": "未指定输出路径且未设置默认输出目录",
+                        "suggestion": "通过 CLI --default-output-dir 或环境变量 XMIND_MCP_DEFAULT_OUTPUT_DIR 设置绝对输出目录，或在调用时传入绝对输出路径"
+                    }
+                }
+            final_out = os.path.join(default_output_dir, default_filename)
+            if not os.path.exists(default_output_dir):
+                try:
+                    os.makedirs(default_output_dir)
+                    logger.info("已创建默认输出目录")
+                except Exception:
+                    logger.error("创建默认输出目录失败")
+                    return {
+                        "ok": False,
+                        "error": {
+                            "status": "error",
+                            "message": "无法创建默认输出目录"
+                        }
+                    }
+            return {"ok": True, "path": final_out}
+    except Exception as e:
+        logger.error(f"解析输出路径异常: {e}")
+        return {"ok": False, "error": {"status": "error", "message": "解析输出路径异常"}}
+
+# 统一裁剪返回中的绝对路径并填充文件名
+def _mask_output_result(result: Any, final_output_path: str, success_message: Optional[str] = None) -> Dict[str, Any]:
+    """裁剪返回中的绝对路径字段，仅保留文件名。
+    注意：仅在成功状态时覆盖成功消息，避免错误状态出现“成功”提示。
+    """
+    try:
+        if not isinstance(result, dict):
+            result = {"status": "success", "data": {}, "message": success_message or "操作成功"}
+        data = result.get("data") or {}
+        # 移除可能含绝对路径的字段
+        for key in ("output_path", "absolute_path", "output_file", "source_file"):
+            data.pop(key, None)
+        data["filename"] = os.path.basename(final_output_path)
+        result["data"] = data
+        # 仅在成功状态时覆盖消息
+        if success_message and str(result.get("status")).lower() == "success":
+            result["message"] = success_message
+        return result
+    except Exception:
+        # 回退为最小成功结构（不暴露路径）
+        return {"status": "success", "message": success_message or "操作成功", "data": {"filename": os.path.basename(final_output_path)}}
 
 @dataclass
 class XMindConfig:
@@ -168,15 +237,14 @@ if FASTMCP_AVAILABLE:
             if not file_path:
                 return json.dumps({
                     "status": "error",
-                    "error": "文件路径不能为空"
+                    "message": "文件路径不能为空"
                 }, ensure_ascii=False)
             
             # 检查文件是否存在
             if not os.path.exists(file_path):
                 return json.dumps({
                     "status": "error",
-                    "error": f"文件不存在: {file_path}",
-                    "file_path": file_path
+                    "message": f"文件不存在: {file_path}"
                 }, ensure_ascii=False)
             
             # 检查文件扩展名
@@ -188,27 +256,26 @@ if FASTMCP_AVAILABLE:
             if file_size == 0:
                 return json.dumps({
                     "status": "error",
-                    "error": "文件为空",
-                    "file_path": file_path
+                    "message": "文件为空"
                 }, ensure_ascii=False)
             
             logger.info(f"读取XMind文件: {file_path}, 大小: {file_size} 字节")
             
             # 调用核心引擎读取文件
             result = core_read_xmind_file(file_path)
-            
-            # 添加文件路径信息到结果中
-            if isinstance(result, dict):
-                result["file_path"] = file_path
-                result["file_size"] = file_size
-            
+
+            # 将文件路径信息放入 data 中
+            if isinstance(result, dict) and result.get("status") == "success":
+                data = result.get("data") or {}
+                data["file_path"] = file_path
+                data["file_size"] = file_size
+                result["data"] = data
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"读取XMind文件错误: {e}")
             return json.dumps({
                 "status": "error",
-                "error": str(e),
-                "file_path": file_path
+                "message": str(e)
             }, ensure_ascii=False)
 
     @mcp.tool()
@@ -244,61 +311,11 @@ if FASTMCP_AVAILABLE:
             engine = get_engine()
             safe_title = engine._sanitize_filename(title)
             
-            # 确定输出路径 - 新的逻辑
-            if output_path:
-                # 如果指定了输出路径，验证是否为绝对路径
-                if not config_manager.validate_absolute_path(output_path):
-                    return json.dumps({
-                        "status": "error", 
-                        "error": "输出路径必须为绝对路径",
-                        "title": title,
-                        "output_path": output_path
-                    }, ensure_ascii=False)
-                
-                final_output_path = output_path
-                output_dir = os.path.dirname(final_output_path)
-                if output_dir and not os.path.exists(output_dir):
-                    try:
-                        os.makedirs(output_dir)
-                        logger.info(f"创建输出目录: {output_dir}")
-                    except Exception as e:
-                        logger.error(f"创建输出目录失败: {str(e)}")
-                        return json.dumps({
-                            "status": "error",
-                            "error": f"无法创建输出目录: {str(e)}",
-                            "title": title
-                        }, ensure_ascii=False)
-                logger.info(f"使用指定输出路径: {final_output_path}")
-            else:
-                # 未指定输出路径，检查配置文件中的默认输出目录
-                default_output_dir = config_manager.get_default_output_dir()
-                
-                if default_output_dir is None:
-                    # 配置文件中没有指定默认输出目录
-                    return json.dumps({
-                        "status": "error",
-                        "error": "未指定输出路径且配置文件中没有默认输出目录配置",
-                        "title": title,
-                        "suggestion": "请在配置文件中设置default_output_dir或在调用时指定output_path参数"
-                    }, ensure_ascii=False)
-                
-                # 使用配置文件中的默认输出目录
-                final_output_path = os.path.join(default_output_dir, f"{safe_title}.xmind")
-                logger.info(f"使用配置文件默认输出路径: {final_output_path}")
-                
-                # 确保默认输出目录存在
-                if not os.path.exists(default_output_dir):
-                    try:
-                        os.makedirs(default_output_dir)
-                        logger.info(f"创建默认输出目录: {default_output_dir}")
-                    except Exception as e:
-                        logger.error(f"创建默认输出目录失败: {str(e)}")
-                        return json.dumps({
-                            "status": "error",
-                            "error": f"无法创建默认输出目录: {str(e)}",
-                            "title": title,
-                            "default_output_dir": default_output_dir
-                        }, ensure_ascii=False)
+            # 统一解析输出路径
+            ro = _resolve_output_path(output_path, f"{safe_title}.xmind")
+            if not ro.get("ok"):
+                return json.dumps(ro.get("error"), ensure_ascii=False)
+            final_output_path = ro.get("path")
             
             # 将topics_data归一化为children结构，兼容topics/subtopics
             def _normalize_children(obj):
@@ -324,56 +341,22 @@ if FASTMCP_AVAILABLE:
             
             # 调用核心引擎创建思维导图
             result = core_create_mind_map(title, topics_json_str, final_output_path)
-            logger.info(f"创建思维导图: {title} -> {final_output_path}")
-            
+            logger.info("创建思维导图成功")
+
             # 验证文件是否真的被创建
             if os.path.exists(final_output_path):
-                logger.info(f"文件创建成功，大小: {os.path.getsize(final_output_path)} 字节")
-                
-                # 修改返回格式
-                result_data = result
-                if isinstance(result_data, dict) and result_data.get("status") == "success":
-                    # 获取绝对路径
-                    abs_path = os.path.abspath(final_output_path)
-                    # 修改返回数据
-                    result_data["filename"] = os.path.basename(final_output_path)
-                    result_data["message"] = f"思维导图已创建: {abs_path}"
-                    result_data["absolute_path"] = abs_path
-                    result_data["output_path"] = final_output_path
-                    
-                    return json.dumps(result_data, ensure_ascii=False)
-                else:
-                    # 核心引擎返回失败，但仍然返回详细信息
-                    if isinstance(result_data, dict):
-                        result_data["filename"] = os.path.basename(final_output_path)
-                        result_data["absolute_path"] = os.path.abspath(final_output_path)
-                        result_data["output_path"] = final_output_path
-                    return json.dumps(result_data, ensure_ascii=False)
+                masked = _mask_output_result(result, final_output_path, "思维导图已创建")
+                return json.dumps(masked, ensure_ascii=False)
             else:
-                # 文件未创建，返回更详尽的核心错误信息
-                logger.error(f"文件创建失败，目标文件不存在: {final_output_path}")
-                detailed = {}
-                if isinstance(result, dict):
-                    detailed = dict(result)
-                    # 标准化失败状态与补充路径信息
-                    detailed["status"] = detailed.get("status") or "error"
-                    detailed["filename"] = os.path.basename(final_output_path)
-                    detailed["absolute_path"] = os.path.abspath(final_output_path)
-                    detailed["output_path"] = final_output_path
-                    # 若核心未给出错误信息，补充文件不存在提示
-                    if not detailed.get("error"):
-                        detailed["error"] = f"文件创建失败，目标文件不存在: {final_output_path}"
-                else:
-                    detailed = {
-                        "status": "error",
-                        "error": f"文件创建失败，目标文件不存在: {final_output_path}",
-                        "title": title,
-                        "output_path": final_output_path
-                    }
-                return json.dumps(detailed, ensure_ascii=False)
+                # 文件未创建，返回错误信息但不暴露路径
+                logger.error("文件创建失败，目标文件不存在")
+                return json.dumps({
+                    "status": "error",
+                    "message": "文件创建失败，目标文件不存在"
+                }, ensure_ascii=False)
         except Exception as e:
             logger.error(f"创建思维导图错误: {e}")
-            return f"错误: {str(e)}"
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
     @mcp.tool()
     def analyze_mind_map(ctx: Context, file_path: str) -> str:
@@ -384,17 +367,18 @@ if FASTMCP_AVAILABLE:
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"分析思维导图错误: {e}")
-            return f"错误: {str(e)}"
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
     @mcp.tool()
     def convert_to_xmind(ctx: Context, source_filepath: str = None, output_filepath: str = None, source_file: str = None, output_file: str = None) -> str:
         """将纯文本、Markdown、HTML、Word、Excel等文件转换为XMind。
-        
-        注意：不要传入JSON结构；JSON结构请使用 `create_mind_map`。
-        
+
+        要求：`source_filepath` 必须为绝对路径；相对路径会被拒绝并返回错误提示。
+        注意：不要传入 JSON 结构；JSON 结构请使用 `create_mind_map`。
+
         Args:
-            source_filepath: 源文件路径（支持 .txt/.md/.html/.docx/.xlsx 等）
-            output_filepath: 可选。输出XMind文件绝对路径；未指定时自动输出到 `output/<源文件名>.xmind`
+            source_filepath: 源文件绝对路径（支持 .txt/.md/.html/.docx/.xlsx 等）
+            output_filepath: 可选。输出XMind文件绝对路径；未指定时由服务器配置的默认绝对目录决定
             source_file: 兼容旧参数名（同 source_filepath）
             output_file: 兼容旧参数名（同 output_filepath）
         """
@@ -404,17 +388,32 @@ if FASTMCP_AVAILABLE:
             if not src:
                 return json.dumps({
                     "status": "error",
-                    "error": "必须提供源文件路径：source_filepath 或 source_file"
+                    "message": "必须提供源文件路径：source_filepath 或 source_file"
                 }, ensure_ascii=False)
-            result = core_convert_to_xmind(src, out)
-            logger.info(f"转换文件为XMind格式: {src}")
-            return json.dumps(result, ensure_ascii=False)
+            # 源路径必须为绝对路径（避免进程工作目录差异导致解析错误）
+            if not validate_absolute_path(src):
+                return json.dumps({
+                    "status": "error",
+                    "message": "必须为绝对路径",
+                    "suggestion": "传入绝对路径，或在 MCP 配置中设置 XMIND_MCP_BASE_DIR 后使用该目录中的相对路径"
+                }, ensure_ascii=False)
+            # 统一解析输出路径
+            base_name = os.path.splitext(os.path.basename(src))[0]
+            ro = _resolve_output_path(out, f"{base_name}.xmind")
+            if not ro.get("ok"):
+                return json.dumps(ro.get("error"), ensure_ascii=False)
+            final_out = ro.get("path")
+
+            result = core_convert_to_xmind(src, final_out)
+            logger.info("转换文件为XMind格式成功")
+            masked = _mask_output_result(result, final_out, "文件转换成功")
+            return json.dumps(masked, ensure_ascii=False)
         except Exception as e:
             logger.error(f"文件转换错误: {e}")
-            return f"错误: {str(e)}"
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
     @mcp.tool()
-    def list_xmind_files(ctx: Context, directory: str = None, recursive: bool = True) -> str:
+    def list_xmind_files(ctx: Context, directory: str = None, recursive: bool = True, pattern: str = None, max_depth: int = None) -> str:
         """列出XMind文件
         
         Args:
@@ -422,27 +421,23 @@ if FASTMCP_AVAILABLE:
             recursive: 是否递归遍历目录（默认 True）
         """
         try:
-            # 如果未指定目录，检查配置文件中的默认输出目录
+            # 如果未指定目录，使用默认输出目录（CLI/ENV）
             if directory is None:
-                default_output_dir = config_manager.get_default_output_dir()
-                
+                default_output_dir = get_default_output_dir()
                 if default_output_dir is None:
-                    # 配置文件中没有指定默认输出目录
                     return json.dumps({
                         "status": "error",
-                        "error": "未指定搜索目录且配置文件中没有默认输出目录配置",
-                        "suggestion": "请在配置文件中设置default_output_dir或在调用时指定directory参数"
+                        "message": "未指定搜索目录且未设置默认输出目录",
+                        "suggestion": "通过 CLI --default-output-dir 或环境变量 XMIND_MCP_DEFAULT_OUTPUT_DIR 设置绝对目录，或在调用时指定 directory"
                     }, ensure_ascii=False)
-                
                 directory = default_output_dir
-                logger.info(f"使用配置文件默认输出目录: {directory}")
+                logger.info(f"使用默认输出目录: {directory}")
             else:
                 # 指定了目录，验证是否为绝对路径
-                if not config_manager.validate_absolute_path(directory):
+                if not validate_absolute_path(directory):
                     return json.dumps({
                         "status": "error",
-                        "error": "搜索目录必须为绝对路径",
-                        "directory": directory
+                        "message": "搜索目录必须为绝对路径"
                     }, ensure_ascii=False)
                 logger.info(f"使用指定目录: {directory}")
             
@@ -450,52 +445,63 @@ if FASTMCP_AVAILABLE:
             if not os.path.exists(directory):
                 return json.dumps({
                     "status": "error",
-                    "error": f"目录不存在: {directory}",
-                    "directory": directory
+                    "message": f"目录不存在: {directory}"
                 }, ensure_ascii=False)
             
             # 验证是否为目录
             if not os.path.isdir(directory):
                 return json.dumps({
                     "status": "error",
-                    "error": f"路径不是目录: {directory}",
-                    "directory": directory
+                    "message": f"路径不是目录: {directory}"
                 }, ensure_ascii=False)
             
-            logger.info(f"搜索XMind文件，目录: {directory}，递归: {recursive}")
+            logger.info(f"搜索XMind文件，目录: {directory}，递归: {recursive}，pattern: {pattern}，max_depth: {max_depth}")
             
             # 调用核心引擎列出文件
-            result = core_list_xmind_files(directory, recursive)
-            
-            # 添加目录信息到结果中
-            if isinstance(result, dict):
-                result["directory"] = directory
-                result["recursive"] = recursive
-            
+            result = core_list_xmind_files(directory, recursive, pattern, max_depth)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.error(f"列出XMind文件错误: {e}")
             return json.dumps({
                 "status": "error",
-                "error": str(e),
-                "directory": directory if 'directory' in locals() else None
+                "message": str(e)
             }, ensure_ascii=False)
 
     @mcp.tool("translate_xmind_titles")
     def translate_xmind_titles(source_filepath: str, output_filepath: str = None, target_lang: str = "en", overwrite: bool = False):
         """翻译XMind中的标题并输出新文件。
         - source_filepath: 源XMind文件路径
-        - output_filepath: 输出XMind文件路径（可选，默认同目录追加后缀）
+        - output_filepath: 输出XMind文件绝对路径（可选，未指定时由默认绝对目录决定）
         - target_lang: 目标语言代码（默认 'en'）
         - overwrite: 如果输出已存在，是否覆盖（默认 False）
         """
-        engine = get_engine()
-        result = engine.translate_xmind_titles(source_filepath, output_filepath, target_lang, overwrite)
-        # MCP需要字符串返回，统一为JSON字符串
         try:
-            return json.dumps(result, ensure_ascii=False)
-        except Exception:
-            return str(result)
+            if not source_filepath:
+                return json.dumps({
+                    "status": "error",
+                    "message": "必须提供源文件路径"
+                }, ensure_ascii=False)
+
+            # 统一解析输出路径
+            base_name = os.path.splitext(os.path.basename(source_filepath))[0]
+            ro = _resolve_output_path(output_filepath, f"{base_name}_{target_lang}.xmind")
+            if not ro.get("ok"):
+                return json.dumps(ro.get("error"), ensure_ascii=False)
+            final_out = ro.get("path")
+
+            engine = get_engine()
+            result = engine.translate_xmind_titles(source_filepath, final_out, target_lang, overwrite)
+            masked = _mask_output_result(result, final_out, "标题翻译并写入成功")
+            try:
+                return json.dumps(masked, ensure_ascii=False)
+            except Exception:
+                return str(masked)
+        except Exception as e:
+            logger.error(f"translate_xmind_titles 执行异常: {e}")
+            return json.dumps({
+                "status": "error",
+                "message": "翻译执行异常"
+            }, ensure_ascii=False)
 
 def main():
     """主函数 - 支持 --mode fastmcp|stdio"""
@@ -504,7 +510,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='启用调试模式')
     parser.add_argument('--mode', choices=['fastmcp', 'stdio'], help='选择运行模式：fastmcp 或 stdio')
     parser.add_argument('--stdio', action='store_true', help='以 STDIO 模式运行（别名）')
-    parser.add_argument('--config', help='指定配置文件路径')
+    parser.add_argument('--default-output-dir', help='指定默认输出目录（绝对路径），也可通过环境变量 XMIND_MCP_DEFAULT_OUTPUT_DIR 设置')
 
     args = parser.parse_args()
 
@@ -512,8 +518,8 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         print("调试模式已启用")
 
-    # 加载配置文件
-    config_manager.load_config(args.config)
+    # 初始化默认输出目录（CLI/ENV）
+    init_default_output_dir(args.default_output_dir)
 
     requested_mode = 'fastmcp' if FASTMCP_AVAILABLE else 'stdio'
     if args.stdio:

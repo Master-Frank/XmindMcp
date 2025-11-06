@@ -9,31 +9,34 @@ Version: 2.0
 """
 
 import json
-import zipfile
 import re
 import os
 from datetime import datetime
 from pathlib import Path
 import mimetypes
+from xmind_writer import create_xmind_file
 
-# 可选依赖，用于处理Word和Excel文件
-try:
-    import docx
-    WORD_AVAILABLE = True
-except ImportError:
-    WORD_AVAILABLE = False
+# 依赖改为懒加载，避免在模块导入时引入重量库
+def _lazy_import_docx():
+    try:
+        import importlib
+        return importlib.import_module('docx')
+    except Exception as e:
+        raise ImportError("需要安装python-docx: pip install python-docx") from e
 
-try:
-    import openpyxl
-    EXCEL_AVAILABLE = True
-except ImportError:
-    EXCEL_AVAILABLE = False
+def _lazy_import_openpyxl():
+    try:
+        import importlib
+        return importlib.import_module('openpyxl')
+    except Exception as e:
+        raise ImportError("需要安装openpyxl: pip install openpyxl") from e
 
-try:
-    from bs4 import BeautifulSoup
-    HTML_AVAILABLE = True
-except ImportError:
-    HTML_AVAILABLE = False
+def _lazy_import_beautifulsoup():
+    try:
+        from bs4 import BeautifulSoup
+        return BeautifulSoup
+    except Exception as e:
+        raise ImportError("需要安装BeautifulSoup4: pip install beautifulsoup4") from e
 
 
 def escape_xml_text(text):
@@ -366,14 +369,13 @@ class HtmlParser(BaseParser):
     
     def __init__(self, file_path):
         super().__init__(file_path)
-        if not HTML_AVAILABLE:
-            raise ImportError("需要安装BeautifulSoup4: pip install beautifulsoup4")
     
     def parse(self):
         """解析HTML文件"""
         with open(self.file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        BeautifulSoup = _lazy_import_beautifulsoup()
         soup = BeautifulSoup(content, 'html.parser')
         title = self.extract_title(soup)
         
@@ -463,11 +465,10 @@ class WordParser(BaseParser):
     
     def __init__(self, file_path):
         super().__init__(file_path)
-        if not WORD_AVAILABLE:
-            raise ImportError("需要安装python-docx: pip install python-docx")
     
     def parse(self):
         """解析Word文档"""
+        docx = _lazy_import_docx()
         doc = docx.Document(self.file_path)
         title = self.extract_title(doc)
         
@@ -545,11 +546,10 @@ class ExcelParser(BaseParser):
     
     def __init__(self, file_path):
         super().__init__(file_path)
-        if not EXCEL_AVAILABLE:
-            raise ImportError("需要安装openpyxl: pip install openpyxl")
     
     def parse(self):
         """解析Excel文件"""
+        openpyxl = _lazy_import_openpyxl()
         wb = openpyxl.load_workbook(self.file_path)
         
         # 使用第一个工作表
@@ -725,125 +725,7 @@ class ParserFactory:
 # XMind文件生成器（复用原有代码）
 # ==============================================
 
-def generate_content_xml(json_structure):
-    """Generate content.xml content"""
-    # 获取基本信息
-    sheet_id = json_structure.get('id', 'default-sheet-id')
-    sheet_title = json_structure.get('title', 'Sheet 1')
-    root_topic = json_structure.get('rootTopic', {})
-    
-    # 生成XML头部
-    xml_parts = [
-        '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
-        '<xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0" '
-        'xmlns:fo="http://www.w3.org/1999/XSL/Format" '
-        'xmlns:svg="http://www.w3.org/2000/svg" '
-        'xmlns:xhtml="http://www.w3.org/1999/xhtml" '
-        'xmlns:xlink="http://www.w3.org/1999/xlink" '
-        'modified-by="Vana" timestamp="1503058545540" version="2.0">',
-        f'<sheet id="{sheet_id}" modified-by="Vana" theme="0kdeemiijde6nuk97e4t0vpp54" timestamp="1503058545540">'
-    ]
-    
-    # 生成根主题
-    if root_topic:
-        topic_id = root_topic.get('id', 'default-topic-id')
-        topic_title = root_topic.get('title', 'Root Topic')
-        
-        xml_parts.append(
-            f'<topic id="{topic_id}" modified-by="Vana" timestamp="1503058545484">'
-            f'<title>{escape_xml_text(topic_title)}</title>'
-        )
-        
-        # 递归生成子主题
-        def generate_topics(topics, indent=0):
-            if not topics:
-                return []
-            
-            result = []
-            result.append('<children><topics type="attached">')
-            
-            for topic in topics:
-                topic_id = topic.get('id', f'topic-{hash(str(topic))}')
-                title = topic.get('title', 'Topic')
-                children = topic.get('children', {}).get('attached', [])
-                
-                result.append(f'<topic id="{topic_id}" modified-by="Vana" timestamp="1503058545484">')
-                result.append(f'<title svg:width="500">{escape_xml_text(title)}</title>')
-                
-                if children:
-                    result.extend(generate_topics(children, indent + 1))
-                
-                result.append('</topic>')
-            
-            result.append('</topics></children>')
-            return result
-        
-        # 生成子主题
-        attached_topics = root_topic.get('children', {}).get('attached', [])
-        if attached_topics:
-            xml_parts.extend(generate_topics(attached_topics))
-        
-        xml_parts.append('</topic>')
-    
-    # 添加扩展和标题
-    xml_parts.extend([
-        '<extensions><extension provider="org.xmind.ui.map.unbalanced">',
-        '<content><right-number>-1</right-number></content>',
-        '</extension></extensions>',
-        f'<title>{escape_xml_text(sheet_title)}</title>',
-        '</sheet>',
-        '</xmap-content>'
-    ])
-    
-    return '\n'.join(xml_parts)
-
-
-def create_metadata():
-    """Create metadata.json"""
-    return {
-        "dataStructureVersion": "2",
-        "layoutEngineVersion": "3",
-        "creator": {
-            "name": "Vana",
-            "version": "23.05.2004"
-        }
-    }
-
-
-def create_manifest():
-    """Create manifest.json"""
-    return {
-        "file-entries": {
-            "content.json": {},
-            "content.xml": {},
-            "metadata.json": {},
-            "Thumbnails/thumbnail.png": {}
-        }
-    }
-
-
-def create_xmind_file(json_structure, output_file):
-    """Create XMind file"""
-    with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # 添加content.json - 注意：正常文件使用数组格式
-        zip_file.writestr('content.json', json.dumps([json_structure], ensure_ascii=False, indent=2))
-        
-        # 添加content.xml
-        content_xml = generate_content_xml(json_structure)
-        zip_file.writestr('content.xml', content_xml)
-        
-        # 添加metadata.json
-        zip_file.writestr('metadata.json', json.dumps(create_metadata(), ensure_ascii=False, indent=2))
-        
-        # 添加manifest.json
-        zip_file.writestr('manifest.json', json.dumps(create_manifest(), ensure_ascii=False, indent=2))
-        
-        # 添加空缩略图目录
-        zip_file.writestr('Thumbnails/', b'')
-        
-        # 添加默认缩略图（透明PNG）
-        thumbnail_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd4c\x00\x00\x00\x00IEND\xaeB`\x82'
-        zip_file.writestr('Thumbnails/thumbnail.png', thumbnail_data)
+# 写入器功能已迁移至 xmind_writer.py；保持对 create_xmind_file 的导入使用
 
 
 # ==============================================
