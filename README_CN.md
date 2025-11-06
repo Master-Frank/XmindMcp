@@ -1,405 +1,230 @@
-# 🧠 XMind AI MCP 智能思维导图工具
+# 🧠 XMind AI MCP – 智能思维导图工具包
 
-一个功能强大的工具，支持将多种文件格式转换为XMind思维导图，集成AI驱动的分析和MCP服务器功能。
+将多种格式转换为 XMind，提供 AI 分析与基于 UVX 的 MCP 服务器。
+
+## 更新记录
+- 1.3.1：修复 `analyze_mind_map` 与新版读取结构的兼容问题（移除 `data.structure`）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🚀 核心功能
 
-### 1. 通用文件转换器
-- **多格式支持**: 支持Markdown、文本、HTML、Word、Excel转换为XMind
-- **智能检测**: 自动识别文件类型和结构
-- **批量处理**: 一键转换多个文件
-- **灵活输出**: 自定义输出路径和命名模式
+### 1. 通用文件转换
+- 多格式转换：Markdown、文本、HTML、Word、Excel → XMind
+- 智能检测：自动识别文件类型与结构
+- 批量处理：一次转换多个文件
+- 灵活输出：自定义输出与命名
 
-### 2. 独立模式
-- **直接转换**: 无需服务器设置即可转换文件
-- **命令行界面**: 简单的命令格式，快速转换
-- **格式选项**: 强制指定格式或自动检测
-- **进度反馈**: 实时转换状态
+### 2. MCP 服务器（UVX）
+- 仅支持 UVX 部署：不使用 `python` 或 `pip` 直启
+- IDE 集成：与 Trae MCP 工具无缝协作
+- 支持 FastMCP 与 STDIO 两种模式
 
-### 3. MCP服务器模式
-- **RESTful API**: 完整的HTTP API，支持所有转换操作
-- **IDE集成**: 与Trae等IDE无缝集成
-- **实时处理**: 通过API调用即时转换
-- **健康监控**: 服务器状态和性能指标
-
-### 4. AI驱动的分析
-- **结构分析**: 智能思维导图结构优化
-- **内容建议**: AI生成的主题推荐
-- **质量指标**: 全面的思维导图质量评估
-- **格式验证**: 确保XMind兼容性和标准
+### 3. AI 分析
+- 结构分析：优化思维导图结构
+- 主题建议：AI 生成内容推荐
+- 质量指标：全面评估与校验
 
 ## 📁 项目结构
 
 ```
 XmindMcp/
-├── configs/                      # MCP配置文件
-├── docs/                         # 文档和指南
-├── examples/                     # 示例输入文件
-├── output/                       # 转换后的XMind文件
+├── configs/                      # MCP 配置
+├── docs/                         # 文档与指南
+├── examples/                     # 示例输入
+├── output/                       # 生成的 XMind 文件
 ├── tests/                        # 测试套件
-├── universal_xmind_converter.py  # 核心转换引擎
-├── xmind_simple_server.py        # MCP服务器实现
-├── validate_xmind_structure.py   # XMind验证工具
-└── xmind_ai_extensions.py        # AI分析功能
+├── universal_xmind_converter.py  # 独立转换 CLI
+├── xmind_core_engine.py          # 核心引擎
+├── xmind_mcp_server.py           # MCP 服务器（FastMCP / STDIO）
+├── xmind_mcp/                    # 包入口（`xmind-mcp`）
+│   ├── __init__.py
+│   └── __main__.py
+└── xmind_mcp_config.json         # 服务器配置（推荐使用相对路径）
 ```
 
-## 🔄 代码调用关系图
+## 🔄 架构概览
 
 ```mermaid
 graph TD
-    %% 用户界面层
     User([用户]) -->|CLI| Converter[universal_xmind_converter.py]
-    User -->|API| SimpleServer[xmind_simple_server.py]
+    User -->|MCP| MCP[xmind_mcp_server.py]
     User -->|测试| TestRunner[tests/run_all_tests.py]
-    
-    %% 服务器层
-    SimpleEngine -->|启动| MCPServer[start_mcp_server.py]
-    MCPServer -->|API调用| APIEndpoints[API端点]
-    APIEndpoints -->|处理| Converter[universal_xmind_converter.py]
-    APIEndpoints -->|验证| Validator[validate_xmind_structure.py]
-    
-    %% 核心引擎层
-    SimpleServer -->|AI功能| AIExt[xmind_ai_extensions.py]
-    Converter -->|解析| Parsers[ParserFactory]
-    Converter -->|生成| XMindGen[XMind生成器]
-    
-    %% 工具层
-    Parsers -->|Markdown| MDParser[markdown_parser.py]
-    Parsers -->|文本| TParser[text_parser.py]
-    Parsers -->|HTML| HParser[html_parser.py]
-    Parsers -->|Word| WParser[word_parser.py]
-    Parsers -->|Excel| EParser[excel_parser.py]
-    Parsers -->|XMind| XParser[xmind_parser.py]
-    Validator -->|读取| XMindReader[XMindValidator]
-    
-    %% 文件系统
+
+    MCP -->|工具| Core[xmind_core_engine.py]
+    Core -->|转换| Converter
+    Core -->|校验| Validator[validate_xmind_structure.py]
+    Core -->|AI| AIExt[xmind_ai_extensions.py]
+
     Converter -->|读取| Examples[examples/]
     Converter -->|写入| Output[output/]
-    SimpleEngine -->|读取| Examples
-    SimpleEngine -->|写入| Output
-    
-    %% 样式定义
+
     classDef userLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef serverLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef engineLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    classDef toolLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef fileLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    
-    class User,TestSuite,BatchConvert userLayer
-    class MCPServer serverLayer
-    class SimpleEngine,AIExt,Converter,Validator engineLayer
-    class Parsers,XMindGen,XMindReader toolLayer
+
+    class User,TestRunner userLayer
+    class MCP serverLayer
+    class Core,AIExt engineLayer
     class Examples,Output fileLayer
 ```
 
-### 调用关系说明
+## 🔧 UVX 快速开始
 
-| 层级 | 文件 | 主要功能 | 依赖关系 |
-|-----|-----|-------------|-------------|
-| **用户界面** | `complete_test_suite.py` | 完整测试套件 | 调用MCP服务器API |
-| | `batch_convert_demo.py` | 批量转换演示 | 直接调用转换器 |
-| **服务器** | `start_mcp_server.py` | MCP服务器启动器 | 创建引擎实例 |
-| **核心引擎** | `xmind_simple_server.py` | XMind简化引擎 | 调用转换器和验证器 |
-| | `xmind_ai_extensions.py` | AI扩展功能 | 提供智能建议 |
-| **转换工具** | `universal_xmind_converter.py` | 通用格式转换器 | 创建解析工厂 |
-| **验证工具** | `validate_xmind_structure.py` | 结构验证器 | 读取和验证XMind文件 |
-
-### 数据流向
-
-1. **输入流程**: `examples/` → `ParserFactory` → `create_xmind_file` → `output/`
-2. **验证流程**: `output/` → `XMindValidator` → 结构分析 → 质量报告
-3. **AI流程**: 用户输入 → `AIExtensions` → 智能建议 → 思维导图优化
-
-## 🔧 快速开始
-
-### ⚡ 超快速启动（推荐）
+### 安装 UV（如果尚未安装）
 ```bash
-# 一键启动，自动安装依赖
-python quick_start.py
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### 🐳 Docker启动
+### 运行（已发布包）
 ```bash
-# 使用docker-compose
-docker-compose up
+uvx xmind-mcp --mode fastmcp
+uvx xmind-mcp --version
+uvx xmind-mcp --help
 ```
 
-### 📦 传统安装启动
+### 本地开发（在仓库根目录）
 ```bash
-# 1. 安装依赖
-pip install beautifulsoup4 python-docx openpyxl
-
-# 2. 启动服务器
-python xmind_mcp_server.py
+uvx --from . xmind-mcp --mode fastmcp
+# 兼容回退（STDIO）
+uvx xmind-mcp --stdio
 ```
 
-### 2. 文件转换（独立模式）
+## 🖥️ Trae MCP 集成（UVX）
 
-#### 单文件转换
-```bash
-# 基础转换（自动检测格式）
-python universal_xmind_converter.py <input_file>
-
-# 指定输出路径
-python universal_xmind_converter.py <input_file> --output <output_path>
-
-# 强制指定格式
-python universal_xmind_converter.py <input_file> --format markdown
+### 标准配置（推荐）
+```json
+{
+  "mcpServers": {
+    "xmind-mcp": {
+      "command": "uvx",
+      "args": ["xmind-mcp"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      },
+      "description": "XMind MCP - UVX 安装版",
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
 ```
 
-#### 批量转换
-```bash
-# 转换目录中的所有文件
-python universal_xmind_converter.py <input_directory> --batch
-
-# 转换特定文件类型
-python universal_xmind_converter.py <directory> --batch --format markdown,html,txt
+### 本地开发配置（禁止绝对路径）
+```json
+{
+  "mcpServers": {
+    "xmind-mcp": {
+      "command": "uvx",
+      "args": ["--from", ".", "xmind-mcp"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      },
+      "description": "XMind MCP - 本地开发",
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
 ```
 
-#### 示例
+## 📦 独立转换（CLI）
+
+### 单文件
 ```bash
-# 转换Markdown文件
 python universal_xmind_converter.py examples/test_markdown.md
+python universal_xmind_converter.py examples/test_document.docx --output output/my_mind_map.xmind
+```
 
-# 转换并指定输出
-python universal_xmind_converter.py examples/test_document.docx --output my_mind_map.xmind
-
-# 批量转换所有文本文件
+### 批量转换
+```bash
 python universal_xmind_converter.py examples/ --batch
+python universal_xmind_converter.py examples/ --batch --format markdown,html,txt
 ```
 
-### 3. MCP服务器模式
+## 🛠️ 可用 MCP 工具
+- `read_xmind_file(file_path)` – 读取 XMind 内容
+- `create_mind_map(title, topics_json, output_path?)` – 创建导图
+- `analyze_mind_map(file_path)` – 分析结构与指标
+- `convert_to_xmind(source_filepath, output_filepath?)` – 多格式转 XMind
+- `list_xmind_files(directory?, recursive?)` – 列出 XMind 文件
+- `translate_xmind_titles(source_filepath, output_filepath?, target_lang?, overwrite?)`
 
-#### 启动服务器
+## ✅ 使用示例（Trae MCP）
+
+### 转换 Markdown 文件
+```python
+convert_to_xmind({
+  "source_filepath": "examples/test_markdown.md"
+  # 不指定 output_filepath，默认写入项目相对的 "output/"
+})
+```
+
+### 创建导图（通过配置默认目录）
+```python
+create_mind_map({
+  "title": "项目计划",
+  "topics_json": [{"title": "里程碑1"}, {"title": "里程碑2"}]
+  # 不传绝对路径；在 xmind_mcp_config.json 中设置 default_output_dir
+})
+```
+
+### 分析现有导图
+```python
+analyze_mind_map({
+  "file_path": "output/test_markdown.xmind"
+})
+```
+
+## ⚙️ 路径与配置
+- 项目示例与 IDE 配置禁止使用绝对路径；优先使用相对路径。
+- 在 `xmind_mcp_config.json` 中将 `default_output_dir` 设置为相对路径（如 `"output"`）。
+- 某些工具支持显式 `output_path`；为遵守路径规范，推荐使用默认输出目录而非传入绝对路径。
+
+## 🧪 运行测试
 ```bash
-# 使用默认端口（8080）启动
-python xmind_simple_server.py
-
-# 自定义端口
-python xmind_simple_server.py --port 9000
-
-# 调试模式
-python xmind_simple_server.py --debug
-```
-
-#### API端点
-服务器运行后，可用的端点：
-- `POST /tools/convert_to_xmind` - 转换文件为XMind
-- `POST /tools/read_xmind` - 读取XMind文件内容
-- `POST /tools/analyze_mind_map` - 分析思维导图结构
-- `POST /tools/create_mind_map` - 创建新思维导图
-- `POST /tools/list_xmind_files` - 列出XMind文件
-- `GET /health` - 健康检查
-
-#### 使用示例
-```bash
-# 通过API转换（使用curl）
-curl -X POST "http://localhost:8080/tools/convert_to_xmind" \
-  -H "Content-Type: application/json" \
-  -d '{"source_filepath": "examples/test.md", "output_filepath": "output/result.xmind"}'
-
-# 读取XMind文件
-curl -X POST "http://localhost:8080/tools/read_xmind" \
-  -H "Content-Type: application/json" \
-  -d '{"filepath": "output/result.xmind"}'
-```
-
-### 4. IDE集成（Trae MCP）
-
-#### 配置模板
-在IDE中创建MCP配置：
-
-```json
-{
-  "mcpServers": {
-    "xmind-converter": {
-      "command": "python",
-      "args": ["<absolute_path_to_project>/xmind_simple_server.py"],
-      "description": "XMind AI MCP"
-    }
-  }
-}
-```
-
-#### 替换占位符
-- `<absolute_path_to_project>` - 您的项目目录绝对路径
-- 如需修改端口：添加 `"--port", "8080"` 到参数中
-
-#### 配置示例
-```json
-{
-  "mcpServers": {
-    "xmind-converter": {
-      "command": "python",
-      "args": ["D:/projects/xmind-converter/xmind_simple_server.py", "--port", "8080"],
-      "description": "XMind AI MCP"
-    }
-  }
-}
-```
-
-### 5. 运行测试
-```bash
-# 运行所有测试
 python tests/run_all_tests.py
-
-# 英文模式
 python tests/run_all_tests.py --english
-
-# 测试特定模块
 python tests/test_setup.py
 python tests/test_core.py
 ```
 
-## 📋 可用工具
-
-配置成功后，您可以在Trae中使用以下工具：
-
-1. **read_xmind_file** - 读取XMind文件内容
-2. **create_mind_map** - 创建新思维导图
-3. **analyze_mind_map** - 分析思维导图结构
-4. **convert_to_xmind** - 转换文件为XMind格式
-5. **list_xmind_files** - 列出XMind文件
-6. **ai_generate_topics** - AI生成主题建议
-
-## 🎯 使用示例
-
-### 独立模式 - 文件转换
-
-#### 单文件转换
-```bash
-# 基础转换（自动检测格式）
-python universal_xmind_converter.py input.md output.xmind
-
-# 强制指定格式
-python universal_xmind_converter.py input.txt output.xmind --format text
-
-# 自定义输出目录
-python universal_xmind_converter.py input.md /path/to/output/ --output-dir
-```
-
-#### 批量转换
-```bash
-# 转换目录中所有支持的文件
-python universal_xmind_converter.py --batch examples/ output/
-
-# 转换特定文件类型
-python universal_xmind_converter.py --batch examples/ output/ --include "*.md,*.txt"
-
-# 递归批量转换
-python universal_xmind_converter.py --batch examples/ output/ --recursive
-```
-
-### 转换Markdown为思维导图
-```python
-# 在Trae中调用MCP工具
-convert_to_xmind({
-    "source_filepath": "examples/playwright-learning-guide.md",
-    "output_filepath": "output/my-guide.xmind"
-})
-```
-
-### AI生成思维导图
-```python
-ai_generate_topics({
-    "context": "前端开发学习路径",
-    "max_topics": 15
-})
-```
-
-### 分析现有思维导图
-```python
-analyze_mind_map({
-    "filepath": "output/test_outline.xmind"
-})
-```
-
-## 📖 详细文档
-
-- **[通用转换器使用指南](UNIVERSAL_CONVERTER_USAGE.md)** - 多格式转换详情
-- **[Trae MCP配置指南](TRAE_MCP_SETUP.md)** - 详细的MCP配置方法
-- **[转换验证报告](conversion_validation_report.md)** - 转换质量验证结果
-- **[XMind AI MCP设计方案](xmind_ai_mcp_design.md)** - 技术架构设计
+## 📖 文档
+- `docs/TRAE_MCP_SETUP.md` – IDE MCP 配置
+- `docs/UNIVERSAL_CONVERTER_USAGE.md` – 独立转换用法
+- `docs/xmind_ai_mcp_design.md` – 架构与设计
 
 ## 🎨 支持的格式
+- Markdown（`.md`, `.markdown`）
+- 文本（`.txt`, `.text`）
+- HTML（`.html`, `.htm`）
+- Word（`.docx`）
+- Excel（`.xlsx`）
+- CSV（`.csv`）
+- JSON（`.json`）
+- XML（`.xml`）
+- YAML（`.yaml`, `.yml`）
 
-### Markdown格式
-```markdown
-# 主标题
-## 一级分支
-### 二级分支
-## 另一个一级分支
-```
+## 🤝 贡献
+- Fork 仓库
+- 创建分支（`git checkout -b feature/your-feature`）
+- 提交（`git commit -m "feat: add your feature"`）
+- 推送（`git push origin feature/your-feature`）
+- 发起 Pull Request
 
-### 文本大纲
-```
-主标题
-  一级分支
-```
-
-### HTML格式
-```html
-<h1>主标题</h1>
-<h2>一级分支</h2>
-<h3>二级分支</h3>
-```
-
-### 支持的文件类型
-- **Markdown** (.md, .markdown)
-- **文本** (.txt, .text)
-- **HTML** (.html, .htm)
-- **Word** (.docx)
-- **Excel** (.xlsx)
-- **CSV** (.csv)
-- **JSON** (.json)
-- **XML** (.xml)
-- **YAML** (.yaml, .yml)
-
-## 🤝 贡献指南
-
-1. Fork 本仓库
-2. 创建您的功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交您的更改 (`git commit -m '添加一些令人惊叹的功能'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开一个拉取请求
-
-## 🔍 验证和质量
-
-- ✅ **9种文件格式**转换验证全部通过
-- ✅ **结构完整性**保持原始层级关系
-- ✅ **内容保真度**完整保留文本内容
-- ✅ **格式兼容性**符合XMind标准
-
-## 🛠️ 技术特点
-
-- **模块化设计**: 易于扩展和维护
-- **错误处理**: 完善的异常处理机制
-- **性能优化**: 支持大文件流式处理
-- **智能检测**: 自动识别文件类型
-- **标准兼容**: 生成标准XMind格式文件
-
-## 📝 更新日志
-
-- **v2.0** - 集成AI MCP服务器功能
-- **v1.2** - 添加自动文件类型识别
-- **v1.1** - 支持多格式批量转换
-- **v1.0** - 基础Markdown转换功能
+## 🔍 质量保证
+- 覆盖 9 种文件格式的转换验证
+- 保持结构完整性
+- 保留内容一致性
+- 符合 XMind 格式规范
 
 ## 📝 许可证
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+MIT 许可证 – 详见 `LICENSE`
 
 ## 🙏 致谢
-
-- XMind 团队提供的优秀思维导图工具
-- Trae IDE 提供的强大开发环境
-- 所有帮助改进本项目的贡献者
-
-
-# 🧠 XMind AI MCP 智能思维导图工具
-支持将多种文件格式转换为 XMind 思维导图，并提供 AI 分析与 MCP 服务集成。
-
-## 更新记录
-- 1.3.1：修复 MCP 分析接口对新版读取结果的兼容问题（不再使用 `data.structure`）。
+- XMind 团队
+- Trae IDE 团队
+- 所有贡献者
