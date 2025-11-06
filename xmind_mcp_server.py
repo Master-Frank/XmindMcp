@@ -350,13 +350,27 @@ if FASTMCP_AVAILABLE:
                         result_data["output_path"] = final_output_path
                     return json.dumps(result_data, ensure_ascii=False)
             else:
-                logger.error(f"文件创建失败，路径: {final_output_path}")
-                return json.dumps({
-                    "status": "error",
-                    "error": f"文件创建失败，路径: {final_output_path}",
-                    "title": title,
-                    "output_path": final_output_path
-                }, ensure_ascii=False)
+                # 文件未创建，返回更详尽的核心错误信息
+                logger.error(f"文件创建失败，目标文件不存在: {final_output_path}")
+                detailed = {}
+                if isinstance(result, dict):
+                    detailed = dict(result)
+                    # 标准化失败状态与补充路径信息
+                    detailed["status"] = detailed.get("status") or "error"
+                    detailed["filename"] = os.path.basename(final_output_path)
+                    detailed["absolute_path"] = os.path.abspath(final_output_path)
+                    detailed["output_path"] = final_output_path
+                    # 若核心未给出错误信息，补充文件不存在提示
+                    if not detailed.get("error"):
+                        detailed["error"] = f"文件创建失败，目标文件不存在: {final_output_path}"
+                else:
+                    detailed = {
+                        "status": "error",
+                        "error": f"文件创建失败，目标文件不存在: {final_output_path}",
+                        "title": title,
+                        "output_path": final_output_path
+                    }
+                return json.dumps(detailed, ensure_ascii=False)
         except Exception as e:
             logger.error(f"创建思维导图错误: {e}")
             return f"错误: {str(e)}"
@@ -466,6 +480,22 @@ if FASTMCP_AVAILABLE:
                 "error": str(e),
                 "directory": directory if 'directory' in locals() else None
             }, ensure_ascii=False)
+
+    @mcp.tool("translate_xmind_titles")
+    def translate_xmind_titles(source_filepath: str, output_filepath: str = None, target_lang: str = "en", overwrite: bool = False):
+        """翻译XMind中的标题并输出新文件。
+        - source_filepath: 源XMind文件路径
+        - output_filepath: 输出XMind文件路径（可选，默认同目录追加后缀）
+        - target_lang: 目标语言代码（默认 'en'）
+        - overwrite: 如果输出已存在，是否覆盖（默认 False）
+        """
+        engine = get_engine()
+        result = engine.translate_xmind_titles(source_filepath, output_filepath, target_lang, overwrite)
+        # MCP需要字符串返回，统一为JSON字符串
+        try:
+            return json.dumps(result, ensure_ascii=False)
+        except Exception:
+            return str(result)
 
 def main():
     """主函数 - 支持 --mode fastmcp|stdio"""

@@ -2,6 +2,9 @@
 
 A powerful tool for converting multiple file formats to XMind mind maps with AI-powered analysis and MCP server integration.
 
+## Changelog
+- 1.3.1: Fix MCP analyze_mind_map compatibility with new read structure (no 'data.structure').
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🚀 Core Features
