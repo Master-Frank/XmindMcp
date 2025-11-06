@@ -225,6 +225,7 @@ python tests/test_core.py
 MIT License – see `LICENSE` for details.
 
 ## 🙏 Acknowledgments
-- XMind team for the tool
-- Trae IDE for the environment
-- All contributors who improved this project
+
+- XMind team for the excellent mind mapping tool
+- Trae IDE for the powerful development environment
+- All contributors who helped improve this project

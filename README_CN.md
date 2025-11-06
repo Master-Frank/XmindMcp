@@ -225,6 +225,7 @@ python tests/test_core.py
 MIT 许可证 – 详见 `LICENSE`
 
 ## 🙏 致谢
-- XMind 团队
-- Trae IDE 团队
-- 所有贡献者
+
+- XMind 团队提供的优秀思维导图工具
+- Trae IDE 提供的强大开发环境
+- 所有帮助改进本项目的贡献者
