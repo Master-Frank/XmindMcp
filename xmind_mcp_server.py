@@ -337,10 +337,16 @@ if FASTMCP_AVAILABLE:
                 return {"title": str(obj)}
 
             normalized_topics = _normalize_children(topics_data) if topics_data else []
+            # 统一顶层结构为列表，避免传入单个字典导致引擎解析报错
+            if isinstance(normalized_topics, dict):
+                normalized_topics = [normalized_topics]
             topics_json_str = json.dumps(normalized_topics, ensure_ascii=False)
             
             # 调用核心引擎创建思维导图
             result = core_create_mind_map(title, topics_json_str, final_output_path)
+            # 若引擎返回错误，直接透传错误信息，避免误导性“文件不存在”提示
+            if isinstance(result, dict) and str(result.get("status")).lower() != "success":
+                return json.dumps(result, ensure_ascii=False)
             logger.info("创建思维导图成功")
 
             # 验证文件是否真的被创建

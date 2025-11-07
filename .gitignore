@@ -50,8 +50,7 @@ temp_uploads/
 tests/test_reports/*.json
 
 # Output files (keep examples)
-# output/*.xmind
-# !output/.gitkeep
+output/
 
 # Jupyter Notebook
 .ipynb_checkpoints/
