@@ -6,6 +6,7 @@ A robust toolkit for converting multiple formats to XMind, with AI analysis and 
 - 1.3.1: Fix `analyze_mind_map` compatibility with new read structure (no `data.structure`).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Badge](https://lobehub.com/badge/mcp/master-frank-xmindmcp)](https://lobehub.com/mcp/master-frank-xmindmcp)
 
 ## 🚀 Core Features
 

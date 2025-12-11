@@ -6,6 +6,7 @@
 - 1.3.1：修复 `analyze_mind_map` 与新版读取结构的兼容问题（移除 `data.structure`）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Badge](https://lobehub.com/badge/mcp/master-frank-xmindmcp)](https://lobehub.com/mcp/master-frank-xmindmcp)
 
 ## 🚀 核心功能
 
