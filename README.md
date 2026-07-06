@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/master-frank-xmindmcp-badge.png)](https://mseep.ai/app/master-frank-xmindmcp)
+
 # 🧠 XMind AI MCP – Intelligent Mind Mapping Toolkit
 
 A robust toolkit for converting multiple formats to XMind, with AI analysis and a UVX-deployed MCP server.
