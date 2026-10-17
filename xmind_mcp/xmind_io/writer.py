@@ -4,11 +4,16 @@
 XMind 写入器模块
 负责将解析后的 JSON 结构打包为 .xmind 文件（ZIP），并生成必要的 content.xml、metadata.json、manifest.json 以及缩略图目录。
 
-此模块与解析器模块（universal_xmind_converter.py 内的各 Parser 类）解耦，减少单文件体量和职责耦合。
+文档模型通过格式适配层转换为JSON/XML，由本模块负责压缩包与原子写入。
 """
 
 import json
+import os
+import tempfile
+from pathlib import Path
 import zipfile
+from ..models import Document
+from .codec import document_to_sheet
 
 
 def escape_xml_text(text):
@@ -116,7 +121,7 @@ def create_manifest():
     }
 
 
-def create_xmind_file(json_structure, output_file):
+def _write_xmind_archive(json_structure, output_file):
     """根据解析后的 JSON 结构创建 .xmind 文件"""
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # content.json：正常文件使用数组格式
@@ -136,3 +141,33 @@ def create_xmind_file(json_structure, output_file):
         zip_file.writestr('Thumbnails/', b'')
         thumbnail_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd4c\x00\x00\x00\x00IEND\xaeB`\x82'
         zip_file.writestr('Thumbnails/thumbnail.png', thumbnail_data)
+
+def _atomic_write_xmind(output_file, write_archive):
+    """在目标目录完整写入并校验ZIP后替换文件；失败时保留原文件。"""
+    target = Path(output_file)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix=f".{target.name}.",
+                                         suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            write_archive(stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        with zipfile.ZipFile(temporary) as archive:
+            if archive.testzip() is not None:
+                raise ValueError("生成的XMind压缩包校验失败")
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def create_xmind_file(document: Document, output_file):
+    """从结构生成XMind文件，失败时不修改已有目标。"""
+    sheet = document_to_sheet(document)
+    _atomic_write_xmind(output_file, lambda stream: _write_xmind_archive(sheet, stream))
+
+
+def write_xmind_bytes(data, output_file):
+    """安全写入翻译等操作生成的完整XMind压缩包。"""
+    _atomic_write_xmind(output_file, lambda stream: stream.write(data))

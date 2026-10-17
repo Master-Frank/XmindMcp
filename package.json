@@ -1,12 +1,11 @@
 {
   "name": "xmind-mcp-server",
-  "version": "1.0.9",
+  "version": "2.0.0",
   "description": "XMind AI MCP Server - 智能思维导图操作",
-  "main": "xmind_mcp_server.py",
   "scripts": {
-    "start": "uvx xmind-mcp --mode fastmcp",
+    "start": "uv run xmind-mcp --stdio",
     "install-deps": "pip install -r requirements.txt",
-    "dev": "uvx xmind-mcp --mode fastmcp",
+    "dev": "uv run xmind-mcp --stdio",
     "test": "python tests/run_all_tests.py"
   },
   "keywords": [

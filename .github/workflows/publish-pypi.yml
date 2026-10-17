@@ -1,61 +1,125 @@
-name: Publish to PyPI
+name: Test and publish to PyPI
 
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize planning through publishing so main pushes cannot choose the same version.
+concurrency:
+  group: ci-pypi-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-publish:
+  prepare:
+    name: Plan package version
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-
-      - name: Install build deps
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
-
-      - name: Verify version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - run: python -m pip install packaging
+      - name: Select package version
+        id: version
         env:
-          TAG_REF: ${{ github.ref_name }}
+          RELEASE_BUILD: ${{ github.repository == 'Master-Frank/XmindMcp' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
         run: |
-          python - <<'PY'
-          import sys, tomllib
-          from pathlib import Path
-          data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
-          version = data['project']['version']
-          print('pyproject version:', version)
-          tag = sys.argv[1]
-          print('tag:', tag)
-          if tag.startswith('v'):
-              tag_version = tag[1:]
-          else:
-              tag_version = tag
-          if version != tag_version:
-              print(f"Version mismatch: pyproject={version}, tag={tag_version}")
-              sys.exit(1)
-          PY
-          echo "Version is aligned with tag: ${TAG_REF}"
+          if [ "$RELEASE_BUILD" = "true" ]; then
+            python .github/scripts/release_version.py plan --release
+          else
+            python .github/scripts/release_version.py plan
+          fi
 
-      - name: Build distribution
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Apply planned version to this workspace
+        env:
+          PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          python -m build
+          python -m pip install packaging
+          python .github/scripts/release_version.py apply --version "$PACKAGE_VERSION"
+
+      - name: Install test and build dependencies
+        run: python -m pip install -e '.[test]' build twine
+
+      - name: Run unit and MCP integration tests
+        run: python tests/run_all_tests.py -q
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Validate distribution metadata
+        run: python -m twine check dist/*
+
+      - name: Verify wheel and MCP entry point outside source tree
+        run: python tests/check_distribution.py dist/*.whl
+
+      - name: Save validated distributions
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish validated distributions
+    needs: [prepare, test]
+    if: >-
+      github.repository == 'Master-Frank/XmindMcp' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check publishing credentials
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "::error::Set repository secret PYPI_API_TOKEN with permission to publish xmind-mcp."
+            exit 1
+          fi
+
+      - name: Download validated distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: python-distributions
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages_dir: dist
           password: ${{ secrets.PYPI_API_TOKEN }}
-          skip_existing: true
-          verbose: true
+          packages-dir: dist/
+          skip-existing: true
+          attestations: false

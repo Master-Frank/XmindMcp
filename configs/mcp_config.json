@@ -3,9 +3,13 @@
     "Xmind": {
       "command": "uvx",
       "args": [
-        "xmind-mcp==1.3.9",
+        "--python",
+        "3.11",
+        "--from",
+        "D:\\project\\XmindMcp",
+        "xmind-mcp",
         "--mode",
-        "fastmcp",
+        "stdio",
         "--default-output-dir",
         "D:\\project\\XmindMcp\\output"
       ],
