@@ -90,8 +90,7 @@ class XMindService:
     def list_xmind_files(self, directory=None, recursive=True, pattern=None, max_depth=None):
         if directory is None:
             path = self.settings.default_output_dir
-            if path is None:
-                raise XMindError("未指定搜索目录且未设置默认输出目录", "missing_output_path")
+            path.mkdir(parents=True, exist_ok=True)
         else:
             path = self.settings.input_path(directory, require_absolute=True)
         if not path.exists():

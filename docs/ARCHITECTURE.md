@@ -34,7 +34,7 @@ graph TD
 
 `XMindService` 负责创建、读取、转换、分析、列举及翻译用例。输入/输出路径规则在 `Settings` 中统一；CLI 先将用户输入的相对文件路径转换为绝对路径，MCP 转换工具继续要求绝对源路径。
 
-内部适配器可抛出带稳定 `code` 的 `XMindError`。公开服务方法在统一边界返回原有 `status/message/data/stats` 格式，失败附加 `error_code`。MCP 适配器只做工具注册、JSON 序列化和输出路径展示过滤，不自行重写业务规则。
+内部适配器可抛出带稳定 `code` 的 `XMindError`。公开服务方法在统一边界返回原有 `status/message/data/stats` 格式，失败附加 `error_code`。MCP 适配器只做工具注册、JSON 序列化和输出结果规范化（保留文件名及绝对路径），不自行重写业务规则。
 
 工具定义只在 `server.tool_handlers` 中声明一次，由 SDK 注册并生成 schema。应用显式创建服务实例，没有旧引擎的惰性单例或限额属性适配层。
 
@@ -57,7 +57,7 @@ server = create_server(service=service)
 # 明确需要运行时再调用 server.run(transport='stdio')
 ```
 
-`Settings.from_env()` 在调用时读取环境变量；配置创建后不随环境变量变化。`base_dir` 默认取创建配置时的工作目录，后续进程工作目录变化不影响相对读取路径。默认输出目录优先级继续为 CLI 参数、环境变量；相对默认目录需要显式配置绝对 `XMIND_MCP_BASE_DIR`。
+`Settings.from_env()` 在调用时读取环境变量；配置创建后不随环境变量变化。`base_dir` 默认取创建配置时的工作目录，后续进程工作目录变化不影响相对读取路径。默认输出目录优先级为 CLI 参数、环境变量、用户主目录下 `Documents/XmindOutput`；应用配置工厂会创建所选目录，直接构造配置不执行文件系统写入，生成文件或列举默认目录时再按需创建；相对默认目录需要显式配置绝对 `XMIND_MCP_BASE_DIR`。
 
 同一进程可创建多个服务和服务器，每个服务拥有自己的配置和解析器注册表。
 

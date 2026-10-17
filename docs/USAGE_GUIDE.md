@@ -11,7 +11,7 @@
 在仓库根目录执行：
 
 ```bash
-uvx --python 3.12 --from . xmind-mcp --stdio --default-output-dir /absolute/path/to/output
+uvx --python 3.12 --from . xmind-mcp --stdio
 ```
 
 MCP 客户端通常负责启动此进程并连接其标准输入/输出。在终端单独运行后等待输入属于正常行为。
@@ -21,7 +21,7 @@ MCP 客户端通常负责启动此进程并连接其标准输入/输出。在终
 ### 从已发布包启动
 
 ```bash
-uvx --python 3.12 xmind-mcp --stdio --default-output-dir /absolute/path/to/output
+uvx --python 3.12 --from xmind-mcp==2.0.1 xmind-mcp --stdio
 ```
 
 此命令使用 PyPI 已发布版本；本地尚未发布的修改必须用 `--from .` 或指定源码目录。
@@ -39,7 +39,7 @@ uvx --python 3.12 xmind-mcp --stdio --default-output-dir /absolute/path/to/outpu
 
 ## MCP 客户端配置
 
-在 Trae 等支持 STDIO MCP 的客户端中添加以下配置，并将两处 `/absolute/path/...` 替换为本机绝对路径。客户端配置文件的保存位置由客户端决定。
+对于支持 `mcpServers` JSON 格式及 STDIO 的客户端，将仓库 [配置示例](../configs/mcp_config.json) 合并到其 MCP 配置中。已有其他服务时，只添加 `xmind` 项，保留其他配置。配置文件位置及导入方式以客户端为准；Codex 使用 [TOML 配置示例](../configs/mcp_config.toml)，不能直接粘贴此 JSON。Codex、Claude Code 和 Cursor 的逐步配置见 [README 接入教程](../README_CN.md#agent-接入教程)。
 
 ```json
 {
@@ -47,23 +47,29 @@ uvx --python 3.12 xmind-mcp --stdio --default-output-dir /absolute/path/to/outpu
     "xmind": {
       "command": "uvx",
       "args": [
-        "--python", "3.12",
-        "--from", "/absolute/path/to/XmindMcp",
-        "xmind-mcp", "--stdio"
-      ],
-      "env": {
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONUTF8": "1",
-        "XMIND_MCP_DEFAULT_OUTPUT_DIR": "/absolute/path/to/output"
-      }
+        "--python",
+        "3.12",
+        "--from",
+        "xmind-mcp==2.0.1",
+        "xmind-mcp",
+        "--stdio"
+      ]
     }
   }
 }
 ```
 
-Windows 可使用 `D:/project/XmindMcp`、`D:/project/XmindMcp/output` 等路径；JSON 中反斜杠需要转义。仓库 [配置示例](../configs/mcp_config.json) 也需要按本机目录修改。源码目录使用绝对路径，避免客户端启动位置不同导致找不到项目。
+使用前完成以下设置：
 
-若要连接已发布包，删除 `--from` 和其后的源码目录参数即可。客户端启动后应能列出下面六个工具。
+1. 安装 `uv`，确认终端执行 `uvx --version` 成功。客户端会通过 `uvx` 下载 Python 3.12、发布包及依赖，首次启动需要网络。
+2. 若客户端找不到 `uvx`，将 `command` 改为其绝对路径。macOS/Linux 用 `command -v uvx` 查询；Windows 用 `where.exe uvx` 查询。例如当前 Mac 可使用 `/opt/homebrew/bin/uvx`。
+3. 保存后重新加载 MCP 或重启客户端。若客户端支持启动超时设置，首次安装建议设置为 120 秒。连接成功后应能列出下面六个工具。
+
+示例从 PyPI 使用 `2.0.1`，无需下载项目源码，也无需 `env` 或输出目录参数。MCP SDK 的 STDIO 通信已显式使用 UTF-8，无需设置 `PYTHONIOENCODING`。
+
+默认目录和成功结果中的 `data.absolute_path` 从 `2.0.1` 起提供；`2.0.0` 必须显式配置输出目录，且 MCP 写入结果只展示文件名。新版本尚未发布或验证本地修改时，将 `--from` 后的包名版本替换为项目源码的绝对路径。
+
+本项目通过本地命令启动，不填写 HTTP URL。
 
 ## 路径与读取预算
 
@@ -71,12 +77,21 @@ Windows 可使用 `D:/project/XmindMcp`、`D:/project/XmindMcp/output` 等路径
 | --- | --- |
 | MCP 转换源文件 | `source_filepath` 或旧别名 `source_file` 必须为绝对路径 |
 | 显式输出文件 | `output_path` / `output_filepath` / `output_file` 必须为绝对路径 |
-| 省略输出文件 | 使用默认输出目录；未配置则返回错误 |
+| 省略输出文件 | 使用配置的默认输出目录，未配置则使用用户主目录下的 `Documents/XmindOutput` |
 | 文件列举 | 显式 `directory` 必须为绝对路径；省略时使用默认输出目录 |
 | 读取、分析、翻译源文件 | 建议使用绝对路径；相对路径按配置创建时捕获的基准目录解析 |
 | 独立转换 CLI | 可以输入相对路径，CLI 会先解析为绝对路径 |
 
-默认输出目录优先级为：CLI `--default-output-dir`，然后是 `XMIND_MCP_DEFAULT_OUTPUT_DIR`。相对默认目录仅在设置了绝对 `XMIND_MCP_BASE_DIR` 时有效；例如基准目录 `/work/project` 加默认目录 `output`，得到 `/work/project/output`。
+默认输出目录优先级为：CLI `--default-output-dir` → `XMIND_MCP_DEFAULT_OUTPUT_DIR` → `Path.home() / "Documents" / "XmindOutput"`。相对默认目录仅在设置了绝对 `XMIND_MCP_BASE_DIR` 时有效；例如基准目录 `/work/project` 加默认目录 `output`，得到 `/work/project/output`。
+
+未设置覆盖值时，默认目录如下：
+
+| 系统 | 默认输出目录 |
+| --- | --- |
+| macOS | `/Users/<用户名>/Documents/XmindOutput` |
+| Windows | `C:/Users/<用户名>/Documents/XmindOutput`（典型用户主目录） |
+
+实际路径以运行 MCP 进程的用户主目录为准，不跟随客户端当前工作目录；这里的 `Documents` 是主目录下的字面子目录，不自动查找 OneDrive 或系统重定向的“文档”位置。需要其他位置时用 CLI 参数或环境变量覆盖。启动时递归创建选中的默认目录，目录已存在可直接使用；无权限或路径被文件占用时会报错。生成文件时也会自动创建目标父目录。显式列举一个不存在的其他目录仍返回错误。
 
 XMind 读取与分析可设置以下环境变量：
 
@@ -169,7 +184,7 @@ Python 调用应用服务时可用 `json.dumps(topics, ensure_ascii=False)` 生�
 
 工具返回包含 JSON 的文本。成功结果使用 `status: "success"`，失败使用 `status: "error"`，并包含 `message`；错误可附带 `error_code`。统计在顶层 `stats`，业务数据在 `data`。
 
-MCP 写入型工具的成功结果展示文件名；读取和列举结果可能包含完整路径。创建、转换及翻译采用同目录临时文件，ZIP 校验成功后原子替换目标，写入失败时保留已有文件。
+创建、转换及翻译三个 MCP 写入型工具的成功结果均包含 `data.filename` 和 `data.absolute_path`，后者是实际生成文件的绝对路径，可直接用于后续读取、分析或展示文件链接。失败结果不承诺包含生成路径。读取和列举结果也可能包含完整路径。创建、转换及翻译采用同目录临时文件，ZIP 校验成功后原子替换目标，写入失败时保留已有文件。
 
 ## 独立文件转换
 
@@ -187,7 +202,7 @@ uv run xmind-convert examples/test_excel.xlsx output/excel.xmind
 xmind-convert input.md output/result.xmind
 ```
 
-省略第二个参数时，输出到执行命令时工作目录下的 `output/<源文件名>.xmind`。此 CLI 没有 `--output`、`--batch` 或 `--format` 参数；批量转换可用 shell 循环或应用服务循环调用。
+省略第二个参数时，使用与 MCP 相同的默认输出目录及环境变量覆盖规则，文件名为 `<源文件名>.xmind`；命令成功后打印生成文件的绝对路径。此 CLI 没有 `--output`、`--batch` 或 `--format` 参数；批量转换可用 shell 循环或应用服务循环调用。
 
 | 格式 | 扩展名 | 当前转换方式 |
 | --- | --- | --- |
@@ -205,7 +220,7 @@ xmind-convert input.md output/result.xmind
 | --- | --- |
 | 客户端启动不了进程 | 在相同环境确认 `uv` / `uvx` 可用；检查源码目录、Python 版本和客户端配置 |
 | 找不到新修改或工具 | 确认连接的是 `--from` 指定的当前源码，而不是旧的已发布包；重启该 MCP 连接 |
-| 缺少输出路径 | 设置默认绝对输出目录，或在调用中传入绝对输出路径 |
+| 默认目录不可写 | 检查目录权限，或通过 CLI 参数/环境变量指定可写的绝对目录 |
 | 转换找不到源文件 | MCP 使用源文件绝对路径；确认文件存在且进程有读取权限 |
 | 生成树的层级不对 | 检查源文件标题/缩进；直接生成主题时检查 `topics_json` 是否为有效 JSON |
 | 节点数少于预期 | 检查是否只读取首个画布、是否触发预算裁剪，以及输入格式是否以标题为结构 |

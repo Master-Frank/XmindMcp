@@ -12,7 +12,7 @@ from .models import ReadLimits
 @dataclass(frozen=True)
 class Settings:
     base_dir: Path = field(default_factory=Path.cwd)
-    default_output_dir: Path | None = None
+    default_output_dir: Path | None = field(default_factory=lambda: Path.home() / "Documents" / "XmindOutput")
     read_limits: ReadLimits = field(default_factory=ReadLimits)
 
     def __post_init__(self):
@@ -20,11 +20,10 @@ class Settings:
         if not base.is_absolute():
             raise ValueError("基准目录必须为绝对路径")
         object.__setattr__(self, "base_dir", base)
-        if self.default_output_dir is not None:
-            output = Path(self.default_output_dir)
-            if not output.is_absolute():
-                raise ValueError("默认输出目录必须为绝对路径")
-            object.__setattr__(self, "default_output_dir", output)
+        output = Path(self.default_output_dir) if self.default_output_dir is not None else Path.home() / "Documents" / "XmindOutput"
+        if not output.is_absolute():
+            raise ValueError("默认输出目录必须为绝对路径")
+        object.__setattr__(self, "default_output_dir", output)
 
     @classmethod
     def from_env(cls, default_output_dir=None, environ: Mapping | None = None):
@@ -51,7 +50,9 @@ class Settings:
         limits = ReadLimits(integer("XMIND_MAX_FILE_SIZE_MB", 200, 1) * 1024 * 1024,
                             integer("XMIND_MAX_NODE_COUNT", 50000, 1),
                             integer("XMIND_MAX_PARSE_DEPTH", 30, 0))
-        return cls(base, selected, limits)
+        settings = cls(base, selected, limits)
+        settings.default_output_dir.mkdir(parents=True, exist_ok=True)
+        return settings
 
     def input_path(self, value, *, require_absolute=False) -> Path:
         if not value:
@@ -66,11 +67,8 @@ class Settings:
             path = Path(value)
             if not path.is_absolute():
                 raise XMindError("输出路径必须为绝对路径")
-        elif self.default_output_dir is not None:
-            path = self.default_output_dir / default_filename
         else:
-            raise XMindError("未指定输出路径且未设置默认输出目录", "missing_output_path",
-                             "通过 --default-output-dir 或 XMIND_MCP_DEFAULT_OUTPUT_DIR 设置绝对输出目录")
+            path = self.default_output_dir / default_filename
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

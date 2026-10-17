@@ -114,6 +114,8 @@ def test_two_servers_keep_configuration_and_results_isolated(tmp_path, mode):
                 result = json.loads(response.content[0].text)
                 assert result['status'] == 'success'
                 assert 'output_path' not in result['data']
+                path = Path(result['data']['absolute_path'])
+                assert path.is_absolute() and path.is_file()
             for client, expected in ((a, 'first_document.xmind'), (b, 'second_document.xmind')):
                 response = await client.call_tool('list_xmind_files', {})
                 result = json.loads(response.content[0].text)
@@ -178,7 +180,7 @@ def test_translation_provider_is_injected_and_archive_resources_are_preserved(tm
                 'source_filepath': str(source), 'output_filepath': str(output), 'target_lang': 'en'})
             translated = json.loads(response.content[0].text)
             assert translated['status'] == 'success'
-            assert translated['data'] == {'filename': output.name}
+            assert translated['data'] == {'filename': output.name, 'absolute_path': str(output)}
     asyncio.run(run())
     assert languages == ['en', 'en']
     with zipfile.ZipFile(output) as archive:

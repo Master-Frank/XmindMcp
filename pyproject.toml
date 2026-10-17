@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xmind-mcp"
-version = "2.0.0"
+version = "2.0.1"
 description = "XMind MCP Server - 思维导图创建/分析/转换（别名兼容、递归列举）"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -62,6 +62,6 @@ include = [
     ".github/scripts/*.py",
     "docs/**",
     "README_CN.md",
-    "UVX_DEPLOYMENT_GUIDE.md",
-    "configs/mcp_config.json",
+    "configs/*.json",
+    "configs/*.toml",
 ]

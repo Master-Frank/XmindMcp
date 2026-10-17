@@ -15,7 +15,7 @@ def main(argv=None):
     parser.add_argument('--debug', action='store_true', help='启用调试模式')
     parser.add_argument('--mode', choices=['fastmcp', 'stdio'], help='兼容旧配置；均使用SDK v2 STDIO传输')
     parser.add_argument('--stdio', action='store_true', help='STDIO模式兼容别名')
-    parser.add_argument('--default-output-dir', help='默认输出目录（绝对路径或相对已配置的基准目录）')
+    parser.add_argument('--default-output-dir', help='默认输出目录（默认：用户主目录下 Documents/XmindOutput；缺失时自动创建）')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stderr)
@@ -30,10 +30,10 @@ def convert_main(argv=None):
     parser.add_argument('output_file', nargs='?')
     args = parser.parse_args(argv)
     source = Path(args.input_file).resolve()
-    output = Path(args.output_file).resolve() if args.output_file else Path.cwd() / 'output' / f'{source.stem}.xmind'
+    output = Path(args.output_file).resolve() if args.output_file else None
     service = XMindService(Settings.from_env())
-    result = service.convert_to_xmind(str(source), str(output))
+    result = service.convert_to_xmind(str(source), str(output) if output is not None else None)
     print(result['message'])
     if result['status'] == 'success':
-        print(f'输出文件: {output}')
+        print(f"输出文件: {result['data']['output_file']}")
     return 0 if result['status'] == 'success' else 1

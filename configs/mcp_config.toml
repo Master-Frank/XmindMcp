@@ -1,0 +1,8 @@
+# Codex: merge into ~/.codex/config.toml or a trusted project's .codex/config.toml.
+# Keep your other settings. Replace an existing [mcp_servers.xmind] table instead
+# of adding it twice. If uvx is not on the client's PATH, use its absolute path.
+[mcp_servers.xmind]
+command = "uvx"
+args = ["--python", "3.12", "--from", "xmind-mcp==2.0.1", "xmind-mcp", "--stdio"]
+startup_timeout_sec = 120
+tool_timeout_sec = 120
